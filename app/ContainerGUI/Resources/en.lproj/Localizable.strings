@@ -339,7 +339,6 @@
 "net.mac26.note" = "User-defined networks require macOS 26 or later.";
 "ov.service.kernel" = "Linux Kernel";
 "ov.service.uptime" = "Uptime";
-"proto.note" = "Prototype · simulated data for design review only";
 "set.kernel.arch" = "Architecture";
 "set.kernel.digest" = "Digest";
 "set.language" = "Language";

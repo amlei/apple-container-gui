@@ -339,7 +339,6 @@
 "net.mac26.note" = "自定义网络需要 macOS 26 或更高版本。";
 "ov.service.kernel" = "Linux 内核";
 "ov.service.uptime" = "运行时长";
-"proto.note" = "原型演示 · 数据均为模拟";
 "set.kernel.arch" = "架构";
 "set.kernel.digest" = "摘要";
 "set.language" = "语言";

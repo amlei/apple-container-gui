@@ -107,3 +107,30 @@ final class ProcessHandle {
     fileprivate(set) var finished = false
     func terminate() { process?.terminate() }
 }
+
+extension CLIRunner {
+    static func runWithStdin(_ args: [String], stdin: String) async throws {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            DispatchQueue.global().async {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: binaryPath())
+                p.arguments = args
+                let out = Pipe(), err = Pipe(), input = Pipe()
+                p.standardOutput = out
+                p.standardError = err
+                p.standardInput = input
+                do { try p.run() } catch { cont.resume(throwing: CLIError(message: error.localizedDescription)); return }
+                input.fileHandleForWriting.write(stdin.data(using: .utf8)!)
+                input.fileHandleForWriting.closeFile()
+                let errData = err.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                if p.terminationStatus != 0 {
+                    let msg = String(data: errData, encoding: .utf8) ?? "exit \(p.terminationStatus)"
+                    cont.resume(throwing: CLIError(message: msg.trimmingCharacters(in: .whitespacesAndNewlines)))
+                } else {
+                    cont.resume(returning: ())
+                }
+            }
+        }
+    }
+}

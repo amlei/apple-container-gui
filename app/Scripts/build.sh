@@ -11,7 +11,7 @@ APP_DIR="build/$APP_NAME.app"
 swift build -c release
 
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-cp "$BUILD_DIR/ContainerGUI" "$APP_DIR/Contents/MacOS/$APP_NAME"
+cp "$BUILD_DIR/ContainerApp" "$APP_DIR/Contents/MacOS/$APP_NAME"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -45,19 +45,25 @@ cp -R "$BUILD_DIR/ContainerGUI_ContainerGUI.bundle" "$APP_DIR/Contents/Resources
 
 # Build the app icon (.icns) from the project logo.
 LOGO="ContainerGUI/Resources/logo.png"
-ICONSET="$(mktemp -d)"
-sips -z 16 16 "$LOGO" --out "$ICONSET/icon_16x16.png" >/dev/null 2>&1
-sips -z 32 32 "$LOGO" --out "$ICONSET/icon_16x16@2x.png" >/dev/null 2>&1
-sips -z 32 32 "$LOGO" --out "$ICONSET/icon_32x32.png" >/dev/null 2>&1
-sips -z 64 64 "$LOGO" --out "$ICONSET/icon_32x32@2x.png" >/dev/null 2>&1
-sips -z 128 128 "$LOGO" --out "$ICONSET/icon_128x128.png" >/dev/null 2>&1
-sips -z 256 256 "$LOGO" --out "$ICONSET/icon_128x128@2x.png" >/dev/null 2>&1
-sips -z 256 256 "$LOGO" --out "$ICONSET/icon_256x256.png" >/dev/null 2>&1
-sips -z 512 512 "$LOGO" --out "$ICONSET/icon_256x256@2x.png" >/dev/null 2>&1
-sips -z 512 512 "$LOGO" --out "$ICONSET/icon_512x512.png" >/dev/null 2>&1
-sips -z 1024 1024 "$LOGO" --out "$ICONSET/icon_512x512@2x.png" >/dev/null 2>&1
-iconutil -c icns "$ICONSET" -o "$APP_DIR/Contents/Resources/AppIcon.icns" 2>/dev/null || true
-rm -rf "$ICONSET"
+ICONSET_ROOT="$(mktemp -d)"
+ICONSET="$ICONSET_ROOT/AppIcon.iconset"
+ICON_SOURCE="$ICONSET_ROOT/icon_source.png"
+mkdir -p "$ICONSET"
+# Mask the logo into the standard macOS squircle, then carve every icon size
+# from that rounded source so Finder / Dock / Cmd-Tab never show right-angles.
+swift Scripts/make_icon.swift "$LOGO" "$ICON_SOURCE"
+sips -z 16 16 "$ICON_SOURCE" --out "$ICONSET/icon_16x16.png" >/dev/null 2>&1
+sips -z 32 32 "$ICON_SOURCE" --out "$ICONSET/icon_16x16@2x.png" >/dev/null 2>&1
+sips -z 32 32 "$ICON_SOURCE" --out "$ICONSET/icon_32x32.png" >/dev/null 2>&1
+sips -z 64 64 "$ICON_SOURCE" --out "$ICONSET/icon_32x32@2x.png" >/dev/null 2>&1
+sips -z 128 128 "$ICON_SOURCE" --out "$ICONSET/icon_128x128.png" >/dev/null 2>&1
+sips -z 256 256 "$ICON_SOURCE" --out "$ICONSET/icon_128x128@2x.png" >/dev/null 2>&1
+sips -z 256 256 "$ICON_SOURCE" --out "$ICONSET/icon_256x256.png" >/dev/null 2>&1
+sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET/icon_256x256@2x.png" >/dev/null 2>&1
+sips -z 512 512 "$ICON_SOURCE" --out "$ICONSET/icon_512x512.png" >/dev/null 2>&1
+sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET/icon_512x512@2x.png" >/dev/null 2>&1
+iconutil -c icns "$ICONSET" -o "$APP_DIR/Contents/Resources/AppIcon.icns"
+rm -rf "$ICONSET_ROOT"
 
 codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || true
 echo "Built $APP_DIR"

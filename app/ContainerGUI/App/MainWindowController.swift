@@ -1,22 +1,5 @@
 import AppKit
 
-// Adaptive colors mirrored from design/assets/styles.css for the AppKit sidebar.
-private extension NSColor {
-    static func adaptive(light: NSColor, dark: NSColor) -> NSColor {
-        NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
-        }
-    }
-}
-
-enum ACSidebarPalette {
-    // Solid panel colour = blend of the prototype sidebar-tint over the window base
-    // (opaque so it never shows a frosted-glass wash over the desktop behind the window).
-    static let solid: NSColor = .adaptive(
-        light: NSColor(calibratedRed: 246 / 255, green: 246 / 255, blue: 250 / 255, alpha: 1),
-        dark: NSColor(calibratedRed: 40 / 255, green: 40 / 255, blue: 43 / 255, alpha: 1))
-}
-
 final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate {
     private var splitView: NSSplitView!
     private var sidebarVC: SidebarViewController!
@@ -57,9 +40,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         self.sidebarVC = sidebarVC
         self.contentVC = contentVC
 
-        let sidebarHost = NSView(frame: NSRect(x: 0, y: 0, width: 240, height: 760))
-        sidebarHost.wantsLayer = true
-        sidebarHost.layer?.backgroundColor = ACSidebarPalette.solid.cgColor
+        // Native sidebar material — auto-adapts to light/dark and never shows a
+        // stale cached colour when the in-app appearance is switched.
+        let sidebarHost = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 240, height: 760))
+        sidebarHost.material = .sidebar
+        sidebarHost.blendingMode = .behindWindow
+        sidebarHost.state = .active
         sidebarVC.view.frame = sidebarHost.bounds
         sidebarVC.view.autoresizingMask = [.width, .height]
         sidebarHost.addSubview(sidebarVC.view)
@@ -93,24 +79,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     func windowWillClose(_ notification: Notification) {
         NSApp.terminate(nil)
-    }
-}
-
-// MARK: - Inspector presentation helper
-
-@MainActor
-enum InspectorPresenter {
-    static func present(_ vc: InspectorViewController, from page: PageViewController) {
-        guard let split = page.view.window?.contentView as? NSSplitView else { return }
-        if split.arrangedSubviews.count > 2 {
-            let old = split.arrangedSubviews[2]
-            split.removeArrangedSubview(old)
-            old.removeFromSuperview()
-        }
-        vc.page = page
-        split.addArrangedSubview(vc.view)
-        vc.view.translatesAutoresizingMaskIntoConstraints = false
-        vc.view.widthAnchor.constraint(equalToConstant: 420).isActive = true
     }
 }
 

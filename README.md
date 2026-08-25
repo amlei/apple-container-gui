@@ -2,6 +2,8 @@
 
 A native macOS desktop client for Apple's [`container`](https://github.com/apple/container) CLI, built with AppKit and SwiftUI.
 
+![Container GUI](assets/container.png)
+
 The app lets you manage containers, images, volumes, networks, machines, and Kubernetes clusters directly from a native window: run/pull/build images, inspect and stream container logs, watch live CPU/memory/network metrics, open a terminal, and manage local resources — all backed by the real `container` CLI (no mock data).
 
 The `design/` folder is the browser-based visual prototype (HTML/JS/CSS) used as the design reference; `app/` is the production macOS application.
@@ -38,25 +40,33 @@ open build/Container.app
 
 ```
 apple-container-gui/
-├── app/                       # Production macOS app (Swift Package)
+├── app/                         # Production macOS app (Swift Package)
 │   ├── Package.swift
-│   ├── ContainerGUI/
-│   │   ├── App/               # lifecycle, menus, main window, sidebar
-│   │   ├── Core/              # CLIRunner, Models, Commands, Store, Keymap
-│   │   ├── UI/                # Pages, Sheets, Inspector, Components, Support
-│   │   └── Resources/         # en / zh-Hans localizations
-│   ├── ExceptionCatcher/      # Objective-C exception bridge
-│   └── Scripts/               # build.sh / dev.sh
-├── design/                    # Browser visual prototype (design reference)
-└── assets/                    # Project assets (logo)
+│   ├── ContainerApp/            # Thin executable entry (main.swift)
+│   ├── ContainerGUI/            # Library with all app logic
+│   │   ├── App/                 # AppDelegate, main window, sidebar, icon, bootstrap
+│   │   ├── Core/                # CLIRunner, Commands(+SystemCommands), Models(+SystemModels), Store, Keymap
+│   │   ├── Features/            # One folder per resource domain (vertical slice)
+│   │   │   ├── Overview/
+│   │   │   ├── Containers/      # PageView + Commands + Models
+│   │   │   ├── Images/  Volumes/  Networks/  Machines/  Kubernetes/  Settings/
+│   │   ├── UI/                  # Shell / Overlays / Components / Theme / Support
+│   │   └── Resources/           # en / zh-Hans localizations
+│   ├── Tests/ContainerGUITests/ # Swift Testing tests
+│   ├── ExceptionCatcher/        # Objective-C exception bridge
+│   └── Scripts/                 # build.sh / dev.sh
+├── design/                      # Browser visual prototype (design reference)
+└── assets/                      # Screenshot / project assets
 ```
+
+Each feature in `Features/` is a vertical slice: its SwiftUI page, typed CLI commands, and Codable models live together. Shared interaction UI (sheets, drawers, toasts, confirmations) lives under `UI/Shell` and `UI/Overlays`.
 
 ## Development
 
 - Run `swift build` from `app/` for every change and smoke-test affected screens against the real CLI.
-- No automated test target exists yet; when adding one, use Swift Testing/XCTest and run `swift test --filter <TestName>`.
+- Tests live in `app/Tests/ContainerGUITests` and use Swift Testing (`import Testing`); run `swift test` from `app/`. Model decoding and command parsing are covered there.
 - User-facing strings use `L("key")` and must be added to both `en.lproj` and `zh-Hans.lproj` `Localizable.strings`.
-- Page UI mirrors `design/`; keep new view code in its designated `UI/` subfolder.
+- Page UI mirrors `design/`; keep view code in `UI/` or the relevant `Features/` folder.
 
 ## License
 

@@ -11,9 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyStoredTheme()
         if let url = Bundle.module.url(forResource: "logo", withExtension: "png"),
            let logo = NSImage(contentsOf: url) {
-            NSApp.applicationIconImage = logo
-            logo.size = NSSize(width: 512, height: 512)
-            NSApp.applicationIconImage = logo
+            NSApp.applicationIconImage = logo.macApplicationIcon()
         }
         setupMainMenu()
         let wc = MainWindowController()
