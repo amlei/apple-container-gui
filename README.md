@@ -1,4 +1,16 @@
-# Container GUI
+<p align="center">
+  <img src="assets/logo.png" alt="Container GUI logo" width="150" />
+</p>
+
+<h1 align="center">Container GUI</h1>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-15%2B-blue" alt="macOS 15+" />
+  <img src="https://img.shields.io/badge/Swift-6.0-F05138" alt="Swift 6.0" />
+  <img src="https://img.shields.io/badge/Apple%20container-CLI-lightgrey" alt="Apple container CLI" />
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="License MIT" />
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome" />
+</p>
 
 A native macOS desktop client for Apple's [`container`](https://github.com/apple/container) CLI, built with AppKit and SwiftUI.
 
