@@ -12,8 +12,12 @@ final class SQAppModel: ObservableObject {
     @Published var searchFocusTick = 0
 
     func show(_ sheet: SQSheetKind) { self.sheet = sheet }
-    func openDrawer(_ drawer: SQDrawer) { self.drawer = drawer }
-    func closeDrawer() { self.drawer = nil }
+    func openDrawer(_ drawer: SQDrawer) {
+        withAnimation(.easeOut(duration: 0.28)) { self.drawer = drawer }
+    }
+    func closeDrawer() {
+        withAnimation(.easeOut(duration: 0.24)) { self.drawer = nil }
+    }
     func showToast(_ message: String, isError: Bool = false) {
         let item = SQToast(message: message, isError: isError)
         toast = item
@@ -49,6 +53,7 @@ enum SQSheetKind: Identifiable {
     case newVolume
     case newNetwork
     case newMachine
+    case machineConfig(name: String)
     case k8sNew
     case registryLogin
     case tag(image: String)
@@ -63,6 +68,7 @@ enum SQSheetKind: Identifiable {
         case .newVolume: return "newVolume"
         case .newNetwork: return "newNetwork"
         case .newMachine: return "newMachine"
+        case .machineConfig: return "machineConfig"
         case .k8sNew: return "k8sNew"
         case .registryLogin: return "registryLogin"
         case .tag: return "tag"
@@ -76,12 +82,16 @@ enum SQDrawer: Identifiable {
     case container(id: String)
     case image(ref: String)
     case volume(name: String)
+    case machineShell(name: String)
+    case machineLogs(name: String)
 
     var id: String {
         switch self {
         case .container(let id): return "c-\(id)"
         case .image(let ref): return "i-\(ref)"
         case .volume(let name): return "v-\(name)"
+        case .machineShell(let name): return "ms-\(name)"
+        case .machineLogs(let name): return "ml-\(name)"
         }
     }
 }
@@ -91,6 +101,7 @@ enum SQDrawer: Identifiable {
 struct ContentRootView: View {
     @ObservedObject private var store = Store.shared
     @StateObject private var model = SQAppModel()
+    @State private var keyMonitor: Any?
 
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -98,6 +109,7 @@ struct ContentRootView: View {
             if let drawer = model.drawer {
                 SQDrawerHost(drawer: drawer)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .allowsHitTesting(true)
             }
         }
         .background(SQ.contentBg)
@@ -127,6 +139,31 @@ struct ContentRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .focusSearchAction)) { _ in
             model.requestSearchFocus()
         }
+        .onAppear { installKeyMonitor() }
+        .onDisappear {
+            if let m = keyMonitor { NSEvent.removeMonitor(m) }
+        }
+    }
+
+    private func installKeyMonitor() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // "/" focuses the page search field when not already typing.
+            if event.charactersIgnoringModifiers == "/", !isEditingText {
+                NotificationCenter.default.post(name: .focusSearchAction, object: nil)
+                return nil
+            }
+            // Escape closes the right-hand drawer.
+            if event.keyCode == 53, model.drawer != nil {
+                model.closeDrawer()
+                return nil
+            }
+            return event
+        }
+    }
+
+    private var isEditingText: Bool {
+        guard let fr = NSApp.keyWindow?.firstResponder else { return false }
+        return fr is NSTextView || fr is NSTextField
     }
 
     private func runPrimary() {
@@ -137,6 +174,7 @@ struct ContentRootView: View {
         case .networks: model.show(.newNetwork)
         case .machines: model.show(.newMachine)
         case .k8s: model.show(.k8sNew)
+        case .overview: store.setRoute(.containers)
         default: break
         }
     }
@@ -243,15 +281,21 @@ struct SQDrawerHost: View {
     let drawer: SQDrawer
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            Color.black.opacity(0.22)
-                .onTapGesture { model.closeDrawer() }
-            switch drawer {
-            case .container(let id): ContainerDrawerView(containerID: id)
-            case .image(let ref): ImageDrawerView(ref: ref)
-            case .volume(let name): VolumeDrawerView(name: name)
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                Color.black.opacity(0.24)
+                    .onTapGesture { model.closeDrawer() }
+                    .transition(.opacity)
+                switch drawer {
+                case .container(let id): ContainerDrawerView(containerID: id)
+                case .image(let ref): ImageDrawerView(ref: ref)
+                case .volume(let name): VolumeDrawerView(name: name)
+                case .machineShell(let name): MachineShellDrawerView(name: name)
+                case .machineLogs(let name): MachineLogsDrawerView(name: name)
+                }
             }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .trailing)
+            .clipped()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

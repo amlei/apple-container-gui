@@ -1,5 +1,22 @@
 import AppKit
 
+// Adaptive colors mirrored from design/assets/styles.css for the AppKit sidebar.
+private extension NSColor {
+    static func adaptive(light: NSColor, dark: NSColor) -> NSColor {
+        NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        }
+    }
+}
+
+enum ACSidebarPalette {
+    // Solid panel colour = blend of the prototype sidebar-tint over the window base
+    // (opaque so it never shows a frosted-glass wash over the desktop behind the window).
+    static let solid: NSColor = .adaptive(
+        light: NSColor(calibratedRed: 246 / 255, green: 246 / 255, blue: 250 / 255, alpha: 1),
+        dark: NSColor(calibratedRed: 40 / 255, green: 40 / 255, blue: 43 / 255, alpha: 1))
+}
+
 final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate {
     private var splitView: NSSplitView!
     private var sidebarVC: SidebarViewController!
@@ -18,24 +35,40 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         super.init(window: window)
         window.delegate = self
 
+        // Brand logo in the titlebar (design/ header: icon + "Container").
+        if let url = Bundle.module.url(forResource: "logo", withExtension: "png"),
+           let logo = NSImage(contentsOf: url) {
+            let host = NSView(frame: NSRect(x: 0, y: 0, width: 30, height: 26))
+            let iv = NSImageView(image: logo)
+            iv.imageScaling = .scaleProportionallyUpOrDown
+            iv.frame = NSRect(x: 0, y: 1, width: 22, height: 22)
+            iv.wantsLayer = true
+            iv.layer?.cornerRadius = 5
+            iv.layer?.masksToBounds = true
+            host.addSubview(iv)
+            let accessory = NSTitlebarAccessoryViewController()
+            accessory.layoutAttribute = .leading
+            accessory.view = host
+            window.addTitlebarAccessoryViewController(accessory)
+        }
+
         let sidebarVC = SidebarViewController()
         let contentVC = ContentViewController()
         self.sidebarVC = sidebarVC
         self.contentVC = contentVC
 
-        let effect = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 240, height: 760))
-        effect.material = .sidebar
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        sidebarVC.view.frame = effect.bounds
+        let sidebarHost = NSView(frame: NSRect(x: 0, y: 0, width: 240, height: 760))
+        sidebarHost.wantsLayer = true
+        sidebarHost.layer?.backgroundColor = ACSidebarPalette.solid.cgColor
+        sidebarVC.view.frame = sidebarHost.bounds
         sidebarVC.view.autoresizingMask = [.width, .height]
-        effect.addSubview(sidebarVC.view)
+        sidebarHost.addSubview(sidebarVC.view)
 
         let split = NSSplitView(frame: window.contentLayoutRect)
         split.isVertical = true
         split.dividerStyle = .thin
         split.delegate = self
-        split.addArrangedSubview(effect)
+        split.addArrangedSubview(sidebarHost)
         split.addArrangedSubview(contentVC.view)
         splitView = split
         window.contentView = split
@@ -100,7 +133,7 @@ final class SidebarViewController: NSViewController {
             }
             navButtons[route] = b
             items.append(b)
-            if route == .machines {
+            if route == .k8s {
                 let sep = NSView()
                 sep.translatesAutoresizingMaskIntoConstraints = false
                 sep.heightAnchor.constraint(equalToConstant: 1).isActive = true
@@ -157,6 +190,7 @@ final class SidebarViewController: NSViewController {
         navButtons[.containers]?.badgeValue = Store.shared.runningCount
         statusDot.setColor(Store.shared.servicesRunning ? .systemGreen : .systemGray)
         statusLabel.stringValue = Store.shared.servicesRunning ? L("svc.running") : L("svc.stopped")
+        navButtons.forEach { $0.value.refreshTitle() }
     }
 
     @objc private func toggleServices() {
@@ -192,6 +226,8 @@ final class NavButton: NSView {
 
     var badgeValue: Int = 0 { didSet { badge.stringValue = "\(badgeValue)"; badge.isHidden = badgeValue == 0 } }
 
+    func refreshTitle() { title.stringValue = route.title }
+
     init(route: Route) {
         self.route = route
         super.init(frame: .zero)
@@ -205,7 +241,9 @@ final class NavButton: NSView {
         icon.image = NSImage(systemSymbolName: route.symbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
         icon.imageAlignment = .alignLeft
+        icon.imageScaling = .scaleProportionallyDown
         icon.contentTintColor = .secondaryLabelColor
+        icon.translatesAutoresizingMaskIntoConstraints = false
         title.stringValue = route.title
         title.translatesAutoresizingMaskIntoConstraints = false
         badge.translatesAutoresizingMaskIntoConstraints = false
@@ -221,6 +259,8 @@ final class NavButton: NSView {
         NSLayoutConstraint.activate([
             icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 16),
+            icon.heightAnchor.constraint(equalToConstant: 16),
             title.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 9),
             title.centerYAnchor.constraint(equalTo: centerYAnchor),
             badge.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
@@ -239,11 +279,11 @@ final class NavButton: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         highlight.backgroundColor = selected
-            ? NSColor.controlAccentColor.withAlphaComponent(0.85).cgColor
+            ? NSColor.controlAccentColor.withAlphaComponent(0.88).cgColor
             : NSColor.clear.cgColor
         CATransaction.commit()
         title.textColor = selected ? .white : .labelColor
-        icon.contentTintColor = selected ? .white : .secondaryLabelColor
+        icon.contentTintColor = selected ? .white : .systemBlue
         badge.textColor = selected ? .white : .secondaryLabelColor
         badge.layer?.backgroundColor = selected
             ? NSColor.white.withAlphaComponent(0.25).cgColor

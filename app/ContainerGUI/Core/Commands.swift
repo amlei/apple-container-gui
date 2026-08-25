@@ -57,6 +57,14 @@ enum Commands {
         return (try? decoder.decode([MachineResourceJSON].self, from: data)) ?? []
     }
 
+    static func inspectMachine(_ name: String) async -> MachineResourceJSON? {
+        guard let out = try? await CLIRunner.run(["machine", "inspect", name]),
+              let data = out.data(using: .utf8) else { return nil }
+        if let one = try? decoder.decode(MachineResourceJSON.self, from: data) { return one }
+        if let arr = try? decoder.decode([MachineResourceJSON].self, from: data) { return arr.first }
+        return nil
+    }
+
     static func systemStatus() async -> SystemStatusJSON? {
         guard let out = try? await CLIRunner.run(["system", "status", "--format", "json"]) else { return nil }
         if let data = out.data(using: .utf8), let s = try? decoder.decode(SystemStatusJSON.self, from: data) { return s }
@@ -84,7 +92,7 @@ enum Commands {
             let t = line.trimmingCharacters(in: .whitespaces)
             if t.hasPrefix("[") && t.hasSuffix("]") { section = String(t.dropFirst().dropLast()); continue }
             guard let eq = t.firstIndex(of: "=") else { continue }
-            let k = String(t[t.startIndex..<eq])
+            let k = String(t[t.startIndex..<eq]).trimmingCharacters(in: .whitespaces)
             var v = String(t[t.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
             if v.hasPrefix("\"") && v.hasSuffix("\"") && v.count >= 2 { v = String(v.dropFirst().dropLast()) }
             result.append((section.isEmpty ? k : "\(section).\(k)", v))
@@ -109,6 +117,28 @@ enum Commands {
         if let one = try? decoder.decode(ContainerStatsSnapshot.self, from: data) { return one }
         if let arr = try? decoder.decode([ContainerStatsSnapshot].self, from: data) { return arr.first }
         return nil
+    }
+
+    /// Stream a container's logs. `tail` > 0 limits to the last N lines, `boot` reads the
+    /// boot log, and `follow` keeps the pipe open so the handler receives new lines.
+    static func containerLogsStream(id: String, tail: Int?, boot: Bool, follow: Bool,
+                                    onLine: @escaping (String) -> Void) -> ProcessHandle {
+        var args = ["logs"]
+        if boot { args.append("--boot") }
+        if let t = tail, t > 0 { args += ["-n", "\(t)"] }
+        if follow { args.append("-f") }
+        args.append(id)
+        return CLIRunner.stream(args, onLine: onLine)
+    }
+
+    /// Stream `container system logs` with an optional `--last` window (e.g. "5m",
+    /// "1h", "1d").
+    static func systemLogsStream(last: String?, follow: Bool,
+                                 onLine: @escaping (String) -> Void) -> ProcessHandle {
+        var args = ["system", "logs"]
+        if let l = last, !l.isEmpty { args += ["--last", l] }
+        if follow { args.append("-f") }
+        return CLIRunner.stream(args, onLine: onLine)
     }
 
     static func k8sClusters() async -> [K8sCluster] {
@@ -163,8 +193,23 @@ enum Commands {
         try await CLIRunner.run(args)
     }
 
+    static func pullImageStream(_ ref: String, platform: String?,
+                                onLine: @escaping (String) -> Void,
+                                onExit: @escaping (Bool) -> Void) -> ProcessHandle {
+        var args = ["image", "pull", "--progress", "plain"]
+        if let platform, !platform.isEmpty { args += ["--platform", platform] }
+        args.append(ref)
+        return CLIRunner.stream(args, onLine: onLine, onExit: onExit)
+    }
+
     static func buildImage(_ spec: BuildSpec) async throws {
         try await CLIRunner.run(spec.argv)
+    }
+
+    static func buildImageStream(_ spec: BuildSpec,
+                                 onLine: @escaping (String) -> Void,
+                                 onExit: @escaping (Bool) -> Void) -> ProcessHandle {
+        CLIRunner.stream(spec.argv, onLine: onLine, onExit: onExit)
     }
 
     static func pushImage(_ ref: String) async throws { try await CLIRunner.run(["image", "push", ref]) }
@@ -210,6 +255,9 @@ enum Commands {
         try await CLIRunner.run(["machine", "stop"] + (name.map { [$0] } ?? []))
     }
     static func machineDelete(_ name: String) async throws { try await CLIRunner.run(["machine", "delete", name]) }
+    static func machineLogs(_ name: String) async -> String {
+        (try? await CLIRunner.run(["machine", "logs", name])) ?? ""
+    }
 
     static func registryLogin(server: String, user: String?, password: String) async throws {
         var args = ["registry", "login", "--password-stdin"]

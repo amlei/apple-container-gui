@@ -39,7 +39,8 @@ struct VolumesPageView: View {
                             .foregroundStyle(SQ.text2)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 9)
-                            .background(SQ.fill1)
+                            .background(SQ.cardBg.opacity(0.88))
+                            .overlay(alignment: .bottom) { Rectangle().fill(SQ.hairlineStrong).frame(height: 0.5) }
 
                             ForEach(filtered.indices, id: \.self) { i in
                                 SQVolumeRow(volume: filtered[i])
@@ -77,9 +78,7 @@ private struct SQVolumeRow: View {
                 .frame(width: 76, alignment: .trailing)
             SQChip(text: volume.journalMode ?? "—")
                 .frame(width: 100, alignment: .leading)
-            Text("—")
-                .font(SQ.monoSmall)
-                .foregroundStyle(SQ.text3)
+            attachedView
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(Fmt.relTime(volume.configuration.creationDate))
                 .font(.system(size: 12))
@@ -106,5 +105,20 @@ private struct SQVolumeRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture { model.openDrawer(.volume(name: volume.name)) }
+    }
+
+    private var attachedView: some View {
+        let attached = Store.shared.containers
+            .filter { c in c.mountPairs.contains { $0.src == volume.name } }
+            .map(\.id)
+        return Group {
+            if attached.isEmpty {
+                Text("—").font(SQ.monoSmall).foregroundStyle(SQ.text3)
+            } else {
+                HStack(spacing: 4) {
+                    ForEach(attached, id: \.self) { id in SQChip(text: id) }
+                }
+            }
+        }
     }
 }

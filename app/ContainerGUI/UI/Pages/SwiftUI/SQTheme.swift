@@ -4,31 +4,67 @@ import SwiftUI
 // MARK: - Palette & spacing tokens (mirrors design/assets styles.css)
 
 enum SQ {
-    static let accent = Color.accentColor
-    static let green = Color(red: 0.20, green: 0.78, blue: 0.42)
-    static let red = Color(red: 1.00, green: 0.23, blue: 0.19)
-    static let orange = Color(red: 1.00, green: 0.58, blue: 0.0)
+    // Accent / status colors (prototype light & dark values).
+    static let accent = adaptive(light: nsHex(0x0077ff), dark: nsHex(0x0a84ff))
+    static let accentTint = adaptive(light: nsRGBA(0, 122, 255, 0.12), dark: nsRGBA(10, 132, 255, 0.22))
+    static let green = adaptive(light: nsHex(0x34c759), dark: nsHex(0x30d158))
+    static let red = adaptive(light: nsHex(0xff3b30), dark: nsHex(0xff453a))
+    static let orange = adaptive(light: nsHex(0xff9500), dark: nsHex(0xff9f0a))
+    static let purple = Color(hex: 0xaf52de)
     static let teal = Color(red: 0.19, green: 0.69, blue: 0.78)
-    static let purple = Color.purple
 
-    // Semantic colors that adapt to appearance
-    static let text = Color.primary
-    static let text2 = Color.secondary
-    static let text3 = Color.secondary.opacity(0.65)
-    static let hairline = Color.gray.opacity(0.16)
-    static let hairlineStrong = Color.gray.opacity(0.28)
-    static let fill1 = Color.gray.opacity(0.08)
-    static let fill2 = Color.gray.opacity(0.14)
-    static let fill3 = Color.gray.opacity(0.22)
-    static let cardBg = Color(nsColor: .controlBackgroundColor)
-    static let cardBorder = Color.gray.opacity(0.10)
-    static let contentBg = Color(nsColor: .windowBackgroundColor)
+    // Semantic text / surfaces (prototype light & dark values).
+    static let text = adaptive(light: nsHex(0x1d1d1f), dark: nsHex(0xf5f5f7))
+    static let text2 = adaptive(light: nsHex(0x6e6e73), dark: nsHex(0x98989d))
+    static let text3 = adaptive(light: nsHex(0xaeaeb2), dark: nsHex(0x636366))
+    static let hairline = adaptive(light: nsRGBA(0, 0, 0, 0.09), dark: nsRGBA(255, 255, 255, 0.09))
+    static let hairlineStrong = adaptive(light: nsRGBA(0, 0, 0, 0.14), dark: nsRGBA(255, 255, 255, 0.16))
+    static let fill1 = adaptive(light: nsRGBA(120, 120, 128, 0.08), dark: nsRGBA(120, 120, 128, 0.16))
+    static let fill2 = adaptive(light: nsRGBA(120, 120, 128, 0.14), dark: nsRGBA(120, 120, 128, 0.26))
+    static let fill3 = adaptive(light: nsRGBA(120, 120, 128, 0.22), dark: nsRGBA(120, 120, 128, 0.36))
+    static let cardBg = adaptive(light: nsHex(0xffffff), dark: nsHex(0x2c2c30))
+    static let cardBorder = adaptive(light: nsRGBA(0, 0, 0, 0.07), dark: nsRGBA(255, 255, 255, 0.075))
+    // The app window is a clean solid panel: pure white in light, window-dark in dark.
+    static let contentBg = adaptive(light: nsHex(0xffffff), dark: nsHex(0x232326))
 
     static let corner: CGFloat = 11
     static let pad: CGFloat = 18
     static let gap: CGFloat = 14
     static let mono = Font.system(size: 11.5, design: .monospaced)
     static let monoSmall = Font.system(size: 11, design: .monospaced)
+}
+
+// MARK: - Adaptive color helpers (light/dark, matching design/assets styles.css)
+
+private func adaptive(light: NSColor, dark: NSColor) -> Color {
+    Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+    })
+}
+
+private func nsHex(_ hex: UInt32) -> NSColor {
+    NSColor(
+        calibratedRed: CGFloat((hex >> 16) & 0xFF) / 255,
+        green: CGFloat((hex >> 8) & 0xFF) / 255,
+        blue: CGFloat(hex & 0xFF) / 255,
+        alpha: 1
+    )
+}
+
+private func nsRGBA(_ r: Int, _ g: Int, _ b: Int, _ a: Double) -> NSColor {
+    NSColor(
+        calibratedRed: CGFloat(r) / 255,
+        green: CGFloat(g) / 255,
+        blue: CGFloat(b) / 255,
+        alpha: CGFloat(a)
+    )
+}
+
+private extension Color {
+    /// Create a SwiftUI color from a 0xRRGGBB integer.
+    init(hex: UInt32) {
+        self.init(nsColor: nsHex(hex))
+    }
 }
 
 // MARK: - Card wrapper
@@ -319,7 +355,7 @@ struct SQDisclosure<Content: View>: View {
             if open {
                 content()
                     .padding(.top, 12)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
             }
         }
     }

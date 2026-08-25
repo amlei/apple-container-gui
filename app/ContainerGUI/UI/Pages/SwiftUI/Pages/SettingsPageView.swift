@@ -5,7 +5,12 @@ struct SettingsPageView: View {
     @ObservedObject private var store = Store.shared
     @EnvironmentObject private var model: SQAppModel
     @AppStorage("theme") private var themeRaw = "auto"
+    @State private var themeSel = 0
     @State private var dnsInput = ""
+    @State private var recAction: String?
+    @State private var recToken: Any?
+    @State private var keymapVersion = 0
+    @State private var langSel = 0
 
     var body: some View {
         PageScaffold(title: L("nav.settings")) {
@@ -26,41 +31,47 @@ struct SettingsPageView: View {
                     .padding(.top, 18)
             }
         }
+        .onAppear {
+            themeSel = ["auto", "light", "dark"].firstIndex(of: themeRaw) ?? 0
+            applyTheme(themeSel)
+            langSel = ["auto", "zh-Hans", "en"].firstIndex(of: AppLanguage.current) ?? 0
+        }
+        .onChange(of: themeSel) { _ in applyTheme(themeSel) }
+        .onChange(of: langSel) { _ in Store.shared.setLanguage(["auto", "zh-Hans", "en"][langSel]) }
     }
 
     private var appearanceGroup: some View {
         SQSettingsGroup(title: L("set.appearance")) {
             SQSettingsRow(label: L("set.theme")) {
-                SQSegmented(options: [L("theme.auto"), L("theme.light"), L("theme.dark")], selection: Binding(
-                    get: { ["auto", "light", "dark"].firstIndex(of: themeRaw) ?? 0 },
-                    set: { applyTheme($0) }
-                ))
+                SQSegmented(options: [L("theme.auto"), L("theme.light"), L("theme.dark")], selection: $themeSel)
             }
             SQSettingsRow(label: L("set.language")) {
-                Menu {
-                    Button("English") { model.showToast("English") }
-                    Button("简体中文") { model.showToast("简体中文") }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("English").font(.system(size: 12, weight: .medium))
-                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                Picker("", selection: $langSel) {
+                    ForEach(["auto", "zh-Hans", "en"].indices, id: \.self) { i in
+                        Text(langLabel(i)).tag(i)
                     }
-                    .padding(.horizontal, 10)
-                    .frame(height: 26)
-                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(SQ.cardBg))
-                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(SQ.hairlineStrong, lineWidth: 0.5))
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    private func applyTheme(_ idx: Int) {
-        withAnimation {
-            themeRaw = ["auto", "light", "dark"][idx]
-            NSApp.appearance = idx == 1 ? NSAppearance(named: .aqua) : (idx == 2 ? NSAppearance(named: .darkAqua) : nil)
+    private func langLabel(_ i: Int) -> String {
+        switch i {
+        case 1: return "简体中文"
+        case 2: return "English"
+        default: return L("set.language.system")
         }
+    }
+
+    private func applyTheme(_ idx: Int) {
+        themeRaw = ["auto", "light", "dark"][idx]
+        let ap = idx == 1 ? NSAppearance(named: .aqua) : (idx == 2 ? NSAppearance(named: .darkAqua) : nil)
+        // Apply synchronously so the appearance and the segmented thumb update in one
+        // render pass; deferring this to an async pass causes a two-phase flash.
+        NSApp.appearance = ap
     }
 
     private var serviceGroup: some View {
@@ -176,31 +187,63 @@ struct SettingsPageView: View {
 
     private var shortcutsGroup: some View {
         SQSettingsGroup(title: L("keys.title"), desc: L("keys.desc")) {
-            shortcutRow(L("nav.overview"), "⌘1")
-            shortcutRow(L("nav.containers"), "⌘2")
-            shortcutRow(L("nav.images"), "⌘3")
-            shortcutRow(L("nav.volumes"), "⌘4")
-            shortcutRow(L("nav.networks"), "⌘5")
-            shortcutRow(L("nav.machines"), "⌘6")
-            shortcutRow(L("nav.k8s"), "⌘7")
-            shortcutRow(L("nav.settings"), "⌘8")
-            shortcutRow(L("act.search"), "⌘F")
-            shortcutRow(L("act.primary"), "⌘N")
+            shortcutRow(L("nav.overview"), "nav.overview")
+            shortcutRow(L("nav.containers"), "nav.containers")
+            shortcutRow(L("nav.images"), "nav.images")
+            shortcutRow(L("nav.volumes"), "nav.volumes")
+            shortcutRow(L("nav.networks"), "nav.networks")
+            shortcutRow(L("nav.machines"), "nav.machines")
+            shortcutRow(L("nav.k8s"), "nav.k8s")
+            shortcutRow(L("nav.settings"), "nav.settings")
+            shortcutRow(L("act.search"), "focus.search")
+            shortcutRow(L("act.primary"), "primary.action")
             SQSettingsRow(label: "") {
-                SQButton(title: L("keys.reset"), icon: "arrow.3.trianglepath", small: true) { model.showToast(L("keys.reset")) }
+                SQButton(title: L("keys.reset"), icon: "arrow.3.trianglepath", small: true) {
+                    Keymap.reset()
+                    keymapVersion += 1
+                    NotificationCenter.default.post(name: .keymapChanged, object: nil)
+                    model.showToast(L("keys.saved"))
+                }
             }
         }
+        .id(keymapVersion)
     }
 
-    private func shortcutRow(_ label: String, _ key: String) -> some View {
+    private func shortcutRow(_ label: String, _ action: String) -> some View {
         SQSettingsRow(label: label) {
-            Text(key)
+            Button {
+                startRecording(action)
+            } label: {
+                Text(recAction == action ? L("keys.recording") : (Keymap.combo(action).isEmpty ? L("keys.none") : Keymap.pretty(Keymap.combo(action))))
                 .font(.system(size: 12, weight: .semibold))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(SQ.fill1))
-                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(SQ.hairlineStrong, lineWidth: 0.5))
+                .frame(minWidth: 44)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(recAction == action ? SQ.accent.opacity(0.16) : SQ.fill1))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(recAction == action ? SQ.accent.opacity(0.5) : SQ.hairlineStrong, lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
         }
+    }
+
+    private func startRecording(_ action: String) {
+        ShortcutRecorder.stop(recToken)
+        recAction = action
+        recToken = ShortcutRecorder.start(onCapture: { combo in
+            Keymap.set(action, combo)
+            recAction = nil
+            recToken = nil
+            keymapVersion += 1
+            NotificationCenter.default.post(name: .keymapChanged, object: nil)
+            model.showToast(L("keys.saved"))
+        }, onCancel: {
+            recAction = nil
+            recToken = nil
+        }, onInvalid: {
+            recAction = nil
+            recToken = nil
+            model.showToast(L("keys.needmod"), isError: true)
+        })
     }
 }
 

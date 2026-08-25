@@ -2,16 +2,36 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var windowController: MainWindowController?
+    private var routeMenuItems: [Route: NSMenuItem] = [:]
+    private var primaryMenuItem: NSMenuItem?
+    private var findMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.appearance = nil  // follow system
+        applyStoredTheme()
+        if let url = Bundle.module.url(forResource: "logo", withExtension: "png"),
+           let logo = NSImage(contentsOf: url) {
+            NSApp.applicationIconImage = logo
+            logo.size = NSSize(width: 512, height: 512)
+            NSApp.applicationIconImage = logo
+        }
         setupMainMenu()
         let wc = MainWindowController()
         windowController = wc
         wc.window?.center()
         wc.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.addObserver(self, selector: #selector(applyKeymap), name: .keymapChanged, object: nil)
         Store.shared.start()
+    }
+
+    private func applyStoredTheme() {
+        let mode = UserDefaults.standard.string(forKey: "theme") ?? "auto"
+        switch mode {
+        case "light": NSApp.appearance = NSAppearance(named: .aqua)
+        case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+        default: NSApp.appearance = nil
+        }
     }
 
     // MARK: Main menu
@@ -36,10 +56,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fileItem = NSMenuItem()
         main.addItem(fileItem)
         let fileMenu = NSMenu(title: L("menu.file"))
-        let newAction = fileMenu.addItem(withTitle: L("act.primary"), action: #selector(primaryAction), keyEquivalent: "n")
+        let newAction = fileMenu.addItem(withTitle: L("act.primary"), action: #selector(primaryAction), keyEquivalent: Keymap.menuKeyEquivalent(Keymap.combo("primary.action")).key)
         newAction.target = self
-        let find = fileMenu.addItem(withTitle: L("act.search"), action: #selector(findAction), keyEquivalent: "f")
+        newAction.keyEquivalentModifierMask = Keymap.menuKeyEquivalent(Keymap.combo("primary.action")).flags
+        primaryMenuItem = newAction
+        let find = fileMenu.addItem(withTitle: L("act.search"), action: #selector(findAction), keyEquivalent: Keymap.menuKeyEquivalent(Keymap.combo("focus.search")).key)
         find.target = self
+        find.keyEquivalentModifierMask = Keymap.menuKeyEquivalent(Keymap.combo("focus.search")).flags
+        findMenuItem = find
         fileMenu.addItem(.separator())
         fileMenu.addItem(withTitle: L("menu.close"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         fileItem.submenu = fileMenu
@@ -62,10 +86,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         main.addItem(viewItem)
         let viewMenu = NSMenu(title: L("menu.view"))
         for (i, r) in Route.allCases.enumerated() {
-            let it = viewMenu.addItem(withTitle: r.title, action: #selector(goRoute(_:)), keyEquivalent: "\(i + 1)")
+            let combo = Keymap.combo("nav.\(r.rawValue)")
+            let it = viewMenu.addItem(withTitle: r.title, action: #selector(goRoute(_:)), keyEquivalent: Keymap.menuKeyEquivalent(combo).key)
             it.target = self
             it.representedObject = r.rawValue
-            it.keyEquivalentModifierMask = [.command]
+            it.keyEquivalentModifierMask = Keymap.menuKeyEquivalent(combo).flags
+            routeMenuItems[r] = it
         }
         viewItem.submenu = viewMenu
 
@@ -78,6 +104,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowItem.submenu = windowMenu
 
         NSApp.mainMenu = main
+    }
+
+    @objc private func applyKeymap() {
+        let primary = Keymap.menuKeyEquivalent(Keymap.combo("primary.action"))
+        primaryMenuItem?.keyEquivalent = primary.key
+        primaryMenuItem?.keyEquivalentModifierMask = primary.flags
+        let find = Keymap.menuKeyEquivalent(Keymap.combo("focus.search"))
+        findMenuItem?.keyEquivalent = find.key
+        findMenuItem?.keyEquivalentModifierMask = find.flags
+        for (route, item) in routeMenuItems {
+            let e = Keymap.menuKeyEquivalent(Keymap.combo("nav.\(route.rawValue)"))
+            item.keyEquivalent = e.key
+            item.keyEquivalentModifierMask = e.flags
+            item.title = route.title
+        }
     }
 
     @MainActor @objc private func goRoute(_ sender: NSMenuItem) {

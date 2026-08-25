@@ -40,7 +40,8 @@ struct ImagesPageView: View {
                             .foregroundStyle(SQ.text2)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 9)
-                            .background(SQ.fill1)
+                            .background(SQ.cardBg.opacity(0.88))
+                            .overlay(alignment: .bottom) { Rectangle().fill(SQ.hairlineStrong).frame(height: 0.5) }
 
                             ForEach(filtered.indices, id: \.self) { i in
                                 SQImageRow(image: filtered[i])
@@ -79,7 +80,7 @@ private struct SQImageRow: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            Text(Fmt.bytes(image.configuration.descriptor?.size))
+            Text(Fmt.bytes(image.sizeBytes))
                 .font(.system(size: 12))
                 .foregroundStyle(SQ.text2)
                 .monospacedDigit()
@@ -88,7 +89,7 @@ private struct SQImageRow: View {
                 .font(SQ.monoSmall)
                 .foregroundStyle(SQ.text)
                 .frame(width: 88, alignment: .leading)
-            SQChip(text: "—")
+            usedByChip
                 .frame(width: 64)
             Text(Fmt.relTime(image.configuration.creationDate))
                 .font(.system(size: 12))
@@ -105,11 +106,18 @@ private struct SQImageRow: View {
                         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? SQ.fill2 : Color.clear))
                 }
                 .buttonStyle(.plain)
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(SQ.text2)
-                    .frame(width: 24, height: 24)
-                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? SQ.fill2 : Color.clear))
+                Menu {
+                    imageActionMenu(image, model)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SQ.text2)
+                        .frame(width: 24, height: 24)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? SQ.fill2 : Color.clear))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
             .frame(width: 56)
             .opacity(hovering ? 1 : 0)
@@ -120,32 +128,17 @@ private struct SQImageRow: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture { model.openDrawer(.image(ref: image.ref)) }
-        .contextMenu {
-            Button(L("act.runContainer")) { model.show(.run(image: image.ref)) }
-            Button(L("act.push")) {
-                Task { try? await Commands.pushImage(image.ref); model.showToast(L("push.doneMsg", ["ref": image.ref])) }
+        .contextMenu { imageActionMenu(image, model) }
+    }
+
+    private var usedByChip: some View {
+        let count = Store.shared.containers.filter { $0.imageRef == image.ref }.count
+        return Group {
+            if count > 0 {
+                SQBadge(text: "\(count)", green: true)
+            } else {
+                SQBadge(text: "—")
             }
-            Button(L("act.tagNew")) { model.show(.tag(image: image.ref)) }
-            Divider()
-            Button(L("act.saveTar")) {
-                let dlg = NSSavePanel()
-                dlg.nameFieldStringValue = image.ref.components(separatedBy: "/").last?.replacingOccurrences(of: ":", with: "_").appending(".tar") ?? "image.tar"
-                if let w = NSApp.keyWindow {
-                    dlg.beginSheetModal(for: w) { resp in
-                        guard resp == .OK, let url = dlg.url else { return }
-                        Task {
-                            try? await Commands.saveImage(image.ref, to: url.path)
-                            model.showToast(L("saved.doneMsg", ["path": url.path]))
-                        }
-                    }
-                }
-            }
-            Divider()
-            Button(role: .destructive) {
-                model.confirm(L("del.img.title", ["ref": image.ref]), message: L("del.img.msg"), confirm: L("confirm.yes"), danger: true) {
-                    Task { try? await Commands.deleteImages([image.ref]); Store.shared.refresh() }
-                }
-            } label: { Text(L("act.delete")) }
         }
     }
 }

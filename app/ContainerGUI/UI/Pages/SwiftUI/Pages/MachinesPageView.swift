@@ -47,29 +47,25 @@ private struct MachineCardView: View {
                     SQPill(text: machine.isRunning ? L("mach.running") : L("mach.stopped"), ok: machine.isRunning)
                 }
                 VStack(alignment: .leading, spacing: 5) {
-                    kvLine(L("mach.image"), "—")
+                    kvLine(L("mach.image"), machine.imageReference)
                     kvLine(L("mach.resources"), "\(machine.cpus ?? 0) CPU · \(Fmt.bytes(machine.memory ?? 0))")
-                    kvLine(L("mach.home"), "RW")
+                    kvLine(L("mach.home"), machine.homeMountText)
                     kvLine(L("mach.created"), Fmt.relTime(machine.createdDate))
                 }
                 .font(.system(size: 12))
 
                 Divider()
                 HStack(spacing: 8) {
-                    Button {
-                        model.confirm(L("del.mach.title", ["n": machine.name]), message: L("del.mach.msg"), confirm: L("confirm.yes"), danger: true) {
-                            Task { try? await Commands.machineDelete(machine.name); Store.shared.refresh() }
+                    if machine.default != true {
+                        SQButton(title: L("act.setDefault"), icon: "star", small: true) {
+                            Task { try? await Commands.machineSetDefault(machine.name); Store.shared.refresh() }
                         }
-                    } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(SQ.red)
-                            .frame(width: 26, height: 26)
-                            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(SQ.red.opacity(0.1)))
                     }
-                    .buttonStyle(.plain)
                     Spacer()
                     if machine.isRunning {
+                        SQButton(title: L("act.shell"), icon: "terminal", small: true) {
+                            model.openDrawer(.machineShell(name: machine.name))
+                        }
                         SQButton(title: L("act.stop"), icon: "stop.fill", small: true) {
                             Task { try? await Commands.machineStop(machine.name); Store.shared.refresh() }
                         }
@@ -78,21 +74,29 @@ private struct MachineCardView: View {
                             Task { try? await Commands.machineSet(name: machine.name, settings: ["start"]); Store.shared.refresh() }
                         }
                     }
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(SQ.text2)
-                        .frame(width: 26, height: 26)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(SQ.fill1))
-                        .contextMenu {
-                            Button(L("act.setDefault")) {
-                                Task { try? await Commands.machineSetDefault(machine.name); Store.shared.refresh() }
-                            }
-                            Button(L("act.delete")) {
-                                model.confirm(L("del.mach.title", ["n": machine.name]), message: L("del.mach.msg"), confirm: L("confirm.yes"), danger: true) {
-                                    Task { try? await Commands.machineDelete(machine.name); Store.shared.refresh() }
-                                }
-                            }
+                    Menu {
+                        Button { model.show(.machineConfig(name: machine.name)) } label: {
+                            Label(L("act.config"), systemImage: "slider.horizontal.3")
                         }
+                        Button { model.openDrawer(.machineLogs(name: machine.name)) } label: {
+                            Label(L("act.viewLogs"), systemImage: "doc.text")
+                        }
+                        Divider()
+                        Button(role: .destructive) {
+                            model.confirm(L("del.mach.title", ["n": machine.name]), message: L("del.mach.msg"), confirm: L("confirm.yes"), danger: true) {
+                                Task { try? await Commands.machineDelete(machine.name); Store.shared.refresh() }
+                            }
+                        } label: { Label(L("act.delete"), systemImage: "trash").foregroundStyle(SQ.red) }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(SQ.text2)
+                            .frame(width: 26, height: 26)
+                            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(SQ.fill1))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
                 }
             }
             .padding(16)

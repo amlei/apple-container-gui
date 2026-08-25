@@ -50,6 +50,12 @@ enum CLIRunner {
 
     /// Run with a line handler for streaming output (logs, pull progress).
     static func stream(_ args: [String], onLine: @escaping (String) -> Void) -> ProcessHandle {
+        stream(args, onLine: onLine, onExit: { _ in })
+    }
+
+    /// Stream output line-by-line, calling `onExit(success)` once the process ends.
+    static func stream(_ args: [String], onLine: @escaping (String) -> Void,
+                       onExit: @escaping (Bool) -> Void) -> ProcessHandle {
         let handle = ProcessHandle()
         DispatchQueue.global().async {
             let p = Process()
@@ -61,12 +67,19 @@ enum CLIRunner {
             do { try p.run() } catch { onLine(error.localizedDescription); return }
             handle.process = p
             for pipe in [out, err] {
+                var lineBuffer = Data()
                 pipe.fileHandleForReading.readabilityHandler = { fh in
                     let data = fh.availableData
                     guard !data.isEmpty else { fh.readabilityHandler = nil; return }
-                    let text = String(data: data, encoding: .utf8) ?? ""
-                    for chunk in text.split(separator: "\n", omittingEmptySubsequences: true) {
-                        onLine(String(chunk))
+                    lineBuffer.append(data)
+                    while let nl = lineBuffer.firstIndex(of: 0x0A) {
+                        let buf = lineBuffer
+                        let lineData = buf[buf.startIndex..<nl]
+                        lineBuffer = Data(buf[buf.index(after: nl)...])
+                        let line = lineData.dropLast(lineData.last == 0x0D ? 1 : 0)
+                        let s = String(decoding: line, as: UTF8.self)
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !s.isEmpty { onLine(s) }
                     }
                 }
             }
@@ -74,6 +87,8 @@ enum CLIRunner {
             out.fileHandleForReading.readabilityHandler = nil
             err.fileHandleForReading.readabilityHandler = nil
             handle.finished = true
+            let ok = p.terminationStatus == 0
+            DispatchQueue.main.async { onExit(ok) }
         }
         return handle
     }

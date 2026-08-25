@@ -38,6 +38,7 @@ struct SQDrawerPanel<Content: View>: View {
             .padding(.top, 18)
             .padding(.bottom, 12)
             content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(width: 472)
         .frame(maxHeight: .infinity)
@@ -171,27 +172,51 @@ private struct ContainerInfoTab: View {
             }
 
             let archText = container.configuration.platform.map { "\($0.os)/\($0.architecture)" } ?? "—"
-            let cmdText = container.configuration.image.reference
             let resourceText = container.configuration.resources.map {
                 "\($0.cpus ?? 0) CPU · \(Fmt.bytes($0.memoryInBytes))"
             } ?? "—"
+            let portsText = container.portPairs.isEmpty
+                ? L("ct.d.none")
+                : container.portPairs.map { "\($0.host):\($0.ct)/\($0.proto)" }.joined(separator: "\n")
             SQKV(monoValue: true, rows: [
                 (L("ct.d.id"), container.id),
                 (L("ct.image"), container.imageRef),
                 (L("ct.status"), statusText),
                 (L("ct.d.arch"), archText),
-                (L("ct.d.cmd"), cmdText),
-                (L("run.net"), "default"),
-                (L("ct.ports"), container.ip),
+                (L("ct.d.cmd"), container.commandText),
+                (L("run.net"), container.networkName),
+                (L("ct.ports"), portsText),
                 (L("run.res"), resourceText),
-                (L("ct.created"), Fmt.dateTime(container.status.startedDate)),
+                (L("ct.d.workdir"), container.workdirText),
+                (L("ct.d.user"), container.userText),
+                (L("ct.created"), Fmt.dateTime(container.createdDate ?? container.status.startedDate)),
             ])
 
-            SQDisclosure(L("ct.d.env")) {
-                SQKV(monoValue: true, rows: [(L("ct.d.none"), "")])
+            SQDisclosure(L("ct.d.env"), open: true) {
+                if container.envPairs.isEmpty {
+                    SQKV(monoValue: true, rows: [(L("ct.d.none"), "")])
+                } else {
+                    SQKV(monoValue: true, rows: container.envPairs)
+                }
             }
             SQDisclosure(L("ct.d.mounts")) {
-                SQKV(monoValue: true, rows: [(L("ct.d.none"), "")])
+                if container.mountPairs.isEmpty {
+                    SQKV(monoValue: true, rows: [(L("ct.d.none"), "")])
+                } else {
+                    SQKV(monoValue: true, rows: container.mountPairs.map { ($0.src, "→ \($0.dst)") })
+                }
+            }
+            if !container.optionFlags.isEmpty {
+                SQDisclosure(L("ct.d.options")) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(container.optionFlags.enumerated()), id: \.offset) { _, flag in
+                                SQBadge(text: flag, accent: true)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
         .padding(.top, 12)
@@ -215,7 +240,9 @@ private struct ContainerLogTab: View {
     @State private var follow = true
     @State private var boot = false
     @State private var tail = 0
-    @State private var seeded: [String] = []
+    @State private var lines: [String] = []
+    @State private var handle: ProcessHandle?
+    @State private var loaded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -241,10 +268,35 @@ private struct ContainerLogTab: View {
             }
             .padding(.top, 6)
 
-            SQLogView(lines: boot ? ["[boot] starting container…", "[boot] kernel loaded", "[boot] ready"] : seeded)
-                .onAppear {
-                    if seeded.isEmpty { seeded = (0..<14).map { "level=info msg=heartbeat \($0)" } }
-                }
+            if loaded && lines.isEmpty {
+                Text("—")
+                    .font(SQ.monoSmall)
+                    .foregroundStyle(SQ.text3)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(14)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SQ.fill1))
+            } else {
+                SQLogView(lines: lines)
+            }
+        }
+        .onAppear { start() }
+        .onDisappear { handle?.terminate() }
+        .onChange(of: follow) { _ in start() }
+        .onChange(of: boot) { _ in start() }
+        .onChange(of: tail) { _ in start() }
+    }
+
+    private func start() {
+        handle?.terminate()
+        handle = nil
+        lines = []
+        loaded = false
+        handle = Commands.containerLogsStream(id: container.id, tail: tail, boot: boot, follow: follow) { line in
+            DispatchQueue.main.async {
+                loaded = true
+                lines.append(line)
+                if lines.count > 800 { lines.removeFirst(lines.count - 800) }
+            }
         }
     }
 }
@@ -325,6 +377,10 @@ struct ImageDrawerView: View {
     @EnvironmentObject private var model: SQAppModel
 
     private var image: ImageResourceJSON? { Store.shared.images.first { $0.ref == ref } }
+    private var usedBy: [String] {
+        guard let img = image else { return [] }
+        return Store.shared.containers.filter { $0.imageRef == img.ref }.map(\.id)
+    }
 
     var body: some View {
         if let img = image {
@@ -353,11 +409,28 @@ struct ImageDrawerView: View {
                         }
                         SQKV(monoValue: true, rows: [
                             ("ID", img.id),
-                            (L("img.size"), Fmt.bytes(img.configuration.descriptor?.size)),
+                            (L("img.size"), Fmt.bytes(img.sizeBytes)),
                             (L("img.osarch"), "linux/\(img.arch)"),
-                            (L("img.usedBy"), L("ct.d.none")),
+                            (L("img.usedBy"), usedBy.isEmpty ? L("ct.d.none") : usedBy.joined(separator: ", ")),
                             (L("img.created"), Fmt.dateTime(img.configuration.creationDate)),
                         ])
+
+                        if !img.layers.isEmpty {
+                            SQDisclosure("\(L("pull.layers")) · \(img.layers.count)") {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(Array(img.layers.enumerated()), id: \.offset) { _, layer in
+                                        HStack(alignment: .top, spacing: 10) {
+                                            Text(layer.cmd)
+                                                .font(SQ.mono)
+                                                .foregroundStyle(SQ.text)
+                                                .lineLimit(2)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
                     }
                     .padding(.top, 8)
                     .padding(.bottom, 20)
@@ -376,6 +449,11 @@ struct VolumeDrawerView: View {
     @EnvironmentObject private var model: SQAppModel
 
     private var volume: VolumeResourceJSON? { Store.shared.volumes.first { $0.name == name } }
+    private var attached: [String] {
+        Store.shared.containers
+            .filter { c in c.mountPairs.contains { $0.src == name } }
+            .map(\.id)
+    }
 
     var body: some View {
         if let v = volume {
@@ -384,7 +462,7 @@ struct VolumeDrawerView: View {
                     SQKV(monoValue: true, rows: [
                         (L("vol.size"), v.configuration.sizeInBytes.map { Fmt.bytes($0) } ?? L("ct.d.none")),
                         (L("vol.journal"), v.journalMode ?? "default"),
-                        (L("vol.attached"), L("ct.d.none")),
+                        (L("vol.attached"), attached.isEmpty ? L("ct.d.none") : attached.joined(separator: ", ")),
                         (L("vol.created"), Fmt.dateTime(v.configuration.creationDate)),
                     ])
                     .padding(.top, 8)
@@ -398,6 +476,58 @@ struct VolumeDrawerView: View {
     }
 }
 
+// MARK: - Machine shell drawer
+
+struct MachineShellDrawerView: View {
+    let name: String
+    @EnvironmentObject private var model: SQAppModel
+
+    var body: some View {
+        SQDrawerPanel(title: name, subtitle: "container machine run -n \(name)") {
+            VStack {
+                SQTerminal(host: name)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 20)
+                Spacer()
+            }
+        }
+    }
+}
+
+// MARK: - Machine logs drawer
+
+struct MachineLogsDrawerView: View {
+    let name: String
+    @State private var follow = true
+    @State private var lines: [String] = []
+
+    var body: some View {
+        SQDrawerPanel(title: name, subtitle: "container machine logs") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    Toggle(isOn: $follow) {}
+                        .toggleStyle(.switch)
+                        .scaleEffect(0.75)
+                        .frame(width: 24)
+                    Text(L("logs.follow")).font(.system(size: 12))
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                SQLogView(lines: lines)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 20)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .task {
+                let out = await Commands.machineLogs(name)
+                lines = out.components(separatedBy: "\n").filter { !$0.isEmpty }
+            }
+        }
+    }
+}
+
 // MARK: - Log view (dark terminal look)
 
 struct SQLogView: View {
@@ -406,8 +536,10 @@ struct SQLogView: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(timeLabel(line))
-                        .foregroundStyle(SQ.text3)
+                    if !hasLeadingTimestamp(line) {
+                        Text(timeLabel(line))
+                            .foregroundStyle(SQ.text3)
+                    }
                     Text(line)
                         .foregroundStyle(Color(red: 0.84, green: 0.84, blue: 0.86))
                 }
@@ -428,6 +560,12 @@ struct SQLogView: View {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
         return f.string(from: Date())
+    }
+
+    private func hasLeadingTimestamp(_ line: String) -> Bool {
+        guard line.count >= 10 else { return false }
+        let chars = Array(line)
+        return chars[0].isNumber && chars[1].isNumber && chars[2].isNumber && chars[3].isNumber && chars[4] == "-"
     }
 }
 

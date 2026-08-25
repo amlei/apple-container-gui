@@ -114,7 +114,7 @@ struct SQTog: View {
             Toggle("", isOn: $isOn)
                 .toggleStyle(.switch)
                 .scaleEffect(0.8)
-                .frame(width: 28)
+                .frame(minWidth: 44, alignment: .leading)
             Text(label).font(.system(size: 12))
             Spacer()
         }
@@ -139,6 +139,17 @@ struct SQStepper: View {
                 .buttonStyle(.bordered)
             }
         }
+    }
+}
+
+struct SQSectionLabel: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(SQ.text)
+            .padding(.top, 6)
     }
 }
 
@@ -183,6 +194,124 @@ struct SQKVEditor: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+// MARK: - Streaming task sheet (pull / build / export / push)
+
+struct SQStreamingSheet<Form: View>: View {
+    let title: String
+    let submit: String
+    let submitIcon: String
+    let start: (@escaping (String) -> Void, @escaping (Bool) -> Void) -> ProcessHandle
+    let onDone: () -> Void
+    var validate: () -> String? = { nil }
+    @ViewBuilder let form: () -> Form
+    @Environment(\.dismiss) private var dismiss
+    @State private var started = false
+    @State private var running = false
+    @State private var finished = false
+    @State private var lines: [String] = []
+    @State private var handle: ProcessHandle?
+    @State private var err: String?
+    @State private var lastLine = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.system(size: 16, weight: .bold))
+                .padding(.top, 20)
+                .padding(.horizontal, 22)
+            ScrollView {
+                if !started {
+                    form()
+                        .padding(.top, 12)
+                        .padding(.horizontal, 22)
+                        .overlay(alignment: .bottomLeading) {
+                            if let err {
+                                Text(err)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(SQ.red)
+                                    .lineLimit(3)
+                                    .padding(.top, 6)
+                            }
+                        }
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if running {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text(L("pull.downloading") + "…")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(SQ.text2)
+                            }
+                        }
+                        SQLogView(lines: lines)
+                            .frame(minHeight: 250)
+                        if let err {
+                            Text(err)
+                                .font(.system(size: 11))
+                                .foregroundStyle(SQ.red)
+                                .lineLimit(4)
+                        }
+                    }
+                    .padding(.top, 14)
+                    .padding(.horizontal, 22)
+                }
+            }
+            .frame(maxHeight: 620)
+            .padding(.top, 4)
+            HStack(spacing: 8) {
+                if running { ProgressView().controlSize(.small) }
+                Spacer()
+                if running {
+                    SQButton(title: L("act.cancel")) { handle?.terminate(); dismiss() }
+                } else {
+                    SQButton(title: L("act.cancel")) { dismiss() }
+                    SQButton(title: finished ? L("act.done") : submit, icon: submitIcon, primary: true) {
+                        if finished {
+                            onDone()
+                            dismiss()
+                        } else {
+                            run()
+                        }
+                    }
+                }
+            }
+            .padding(.top, 14)
+            .padding(.horizontal, 22)
+            .padding(.bottom, 18)
+        }
+        .frame(width: 560)
+        .onDisappear { handle?.terminate() }
+    }
+
+    private func run() {
+        if let v = validate() {
+            err = v
+            return
+        }
+        started = true
+        running = true
+        finished = false
+        err = nil
+        lines = []
+        lastLine = ""
+        handle = start(
+            { line in
+                DispatchQueue.main.async {
+                    lastLine = line
+                    lines.append(line)
+                    if lines.count > 500 { lines.removeFirst(lines.count - 500) }
+                }
+            },
+            { ok in
+                DispatchQueue.main.async {
+                    running = false
+                    finished = ok
+                    if !ok { err = lastLine.isEmpty ? "exit" : lastLine }
+                }
+            })
     }
 }
 
@@ -232,15 +361,22 @@ struct SQRunSheet: View {
                         set: { netName = networks[$0] }
                     ))
                 }
+                SQSectionLabel(L("run.ports"))
                 SQKVEditor(keyPh: L("run.port.ph.host"), valuePh: L("run.port.ph.ct"), rows: $ports)
-                    .padding(.top, 4)
+                SQSectionLabel(L("run.vols"))
                 SQKVEditor(keyPh: L("run.vol.ph.host"), valuePh: L("run.vol.ph.ct"), rows: $vols)
+                SQSectionLabel(L("run.env"))
                 SQKVEditor(keyPh: L("run.env.k"), valuePh: L("run.env.v"), rows: $env)
-                SQTog(label: L("run.opt.init"), isOn: $initProc)
-                SQTog(label: L("run.opt.rosetta"), isOn: $rosetta)
-                SQTog(label: L("run.opt.ro"), isOn: $readOnly)
-                SQTog(label: L("run.opt.rm"), isOn: $autoRemove)
-                SQTog(label: L("run.opt.tty"), isOn: $tty)
+                SQDisclosure(L("run.adv")) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SQTog(label: L("run.opt.init"), isOn: $initProc)
+                        SQTog(label: L("run.opt.rosetta"), isOn: $rosetta)
+                        SQTog(label: L("run.opt.ro"), isOn: $readOnly)
+                        SQTog(label: L("run.opt.rm"), isOn: $autoRemove)
+                        SQTog(label: L("run.opt.tty"), isOn: $tty)
+                    }
+                    .padding(.leading, 4)
+                }
             }
         } onSubmit: {
             guard !image.trimmingCharacters(in: .whitespaces).isEmpty else { return L("run.err.image") }
@@ -283,19 +419,20 @@ struct SQPullSheet: View {
     @State private var platformIdx = 0
 
     var body: some View {
-        SQSheet(title: L("pull.title"), submit: L("pull.begin"), submitIcon: "arrow.down") {
+        SQStreamingSheet(title: L("pull.title"), submit: L("pull.begin"), submitIcon: "arrow.down", start: { onLine, onExit in
+            let r = ref.trimmingCharacters(in: .whitespaces)
+            let platform = platformIdx == 0 ? nil : ["linux/arm64", "linux/amd64"][platformIdx - 1]
+            return Commands.pullImageStream(r, platform: platform, onLine: onLine, onExit: onExit)
+        }, onDone: {
+            model.showToast(L("pull.doneMsg", ["ref": ref.trimmingCharacters(in: .whitespaces), "size": ""]))
+            Store.shared.refresh()
+        }, validate: {
+            ref.trimmingCharacters(in: .whitespaces).isEmpty ? L("run.err.image") : nil
+        }) {
             VStack(alignment: .leading, spacing: 12) {
                 SQField(label: L("pull.ref") + " *", placeholder: L("pull.ref.ph"), text: $ref, mono: true)
                 SQSelect(label: L("pull.platform"), options: [L("pull.platform.auto"), "linux/arm64", "linux/amd64"], selection: $platformIdx)
             }
-        } onSubmit: {
-            guard !ref.trimmingCharacters(in: .whitespaces).isEmpty else { return L("run.err.image") }
-            do {
-                try await Commands.pullImage(ref.trimmingCharacters(in: .whitespaces), platform: platformIdx == 0 ? nil : ["linux/arm64", "linux/amd64"][platformIdx - 1])
-                model.showToast(L("pull.doneMsg", ["ref": ref, "size": ""]))
-                Store.shared.refresh()
-                return nil
-            } catch { return error.localizedDescription }
         }
     }
 }
@@ -311,7 +448,22 @@ struct SQBuildSheet: View {
     @State private var pull = false
 
     var body: some View {
-        SQSheet(title: L("build.title"), submit: L("build.submit"), submitIcon: "hammer") {
+        SQStreamingSheet(title: L("build.title"), submit: L("build.submit"), submitIcon: "hammer", start: { onLine, onExit in
+            let t = tags.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            var spec = BuildSpec(dockerfile: dockerfile, context: context.isEmpty ? "." : context, tags: t)
+            spec.buildArgs = args.filter { !$0.0.isEmpty }
+            spec.target = target.isEmpty ? nil : target
+            spec.noCache = noCache
+            spec.pull = pull
+            return Commands.buildImageStream(spec, onLine: onLine, onExit: onExit)
+        }, onDone: {
+            let t = tags.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            model.showToast(L("build.doneMsg", ["ref": t.first ?? "", "size": ""]))
+            Store.shared.refresh()
+        }, validate: {
+            let t = tags.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            return t.isEmpty ? L("run.err.image") : nil
+        }) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
                     SQField(label: L("build.dockerfile"), text: $dockerfile, mono: true)
@@ -323,20 +475,6 @@ struct SQBuildSheet: View {
                 SQTog(label: L("build.opt.nocache"), isOn: $noCache)
                 SQTog(label: L("build.opt.pull"), isOn: $pull)
             }
-        } onSubmit: {
-            let t = tags.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            guard !t.isEmpty else { return L("run.err.image") }
-            var spec = BuildSpec(dockerfile: dockerfile, context: context.isEmpty ? "." : context, tags: t)
-            spec.buildArgs = args.filter { !$0.0.isEmpty }
-            spec.target = target.isEmpty ? nil : target
-            spec.noCache = noCache
-            spec.pull = pull
-            do {
-                try await Commands.buildImage(spec)
-                model.showToast(L("build.doneMsg", ["ref": t[0], "size": ""]))
-                Store.shared.refresh()
-                return nil
-            } catch { return error.localizedDescription }
         }
     }
 }
@@ -562,29 +700,98 @@ struct SQLoadImageSheet: View {
 }
 
 struct SQSystemLogsSheet: View {
-    @ObservedObject private var store = Store.shared
     @Environment(\.dismiss) private var dismiss
+    @State private var follow = true
+    @State private var range = "5m"
+    @State private var lines: [String] = []
+    @State private var handle: ProcessHandle?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L("set.syslogs")).font(.system(size: 16, weight: .bold))
-            ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(store.containers.prefix(20), id: \.id) { c in
-                        Text("[\(c.id)] \(c.imageRef) · \(c.status.state?.rawValue ?? "—")")
-                            .font(SQ.monoSmall)
-                            .foregroundStyle(SQ.text2)
-                    }
+            HStack(spacing: 12) {
+                Toggle(isOn: $follow) {}
+                    .toggleStyle(.switch)
+                    .scaleEffect(0.75)
+                    .frame(width: 24)
+                Text(L("logs.follow")).font(.system(size: 12))
+                Spacer()
+                Text(L("syslog.last")).font(.system(size: 12)).foregroundStyle(SQ.text2)
+                Picker("", selection: $range) {
+                    Text(L("syslog.5m")).tag("5m")
+                    Text(L("syslog.1h")).tag("1h")
+                    Text(L("syslog.1d")).tag("1d")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(red: 0.106, green: 0.114, blue: 0.133)))
+                .frame(width: 120)
+                .controlSize(.small)
             }
-            .frame(height: 320)
+            SQLogView(lines: lines)
+                .frame(height: 340)
             HStack { Spacer(); SQButton(title: L("act.close")) { dismiss() } }
         }
         .padding(20)
         .frame(width: 560)
+        .onAppear { start() }
+        .onDisappear { handle?.terminate() }
+        .onChange(of: follow) { _ in start() }
+        .onChange(of: range) { _ in start() }
+    }
+
+    private func start() {
+        handle?.terminate()
+        handle = nil
+        lines = []
+        handle = Commands.systemLogsStream(last: range, follow: follow) { line in
+            DispatchQueue.main.async {
+                lines.append(line)
+                if lines.count > 400 { lines.removeFirst(lines.count - 400) }
+            }
+        }
+    }
+}
+
+// MARK: - Machine config
+
+struct SQMachineConfigSheet: View {
+    let name: String
+    @EnvironmentObject private var model: SQAppModel
+    @State private var cpus = 4
+    @State private var memIdx = 2
+    @State private var home = 0
+
+    var body: some View {
+        SQSheet(title: L("mach.cfg.title", ["n": name]), submit: L("act.save")) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(L("mach.cfg.note"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(SQ.text2)
+                HStack(spacing: 12) {
+                    SQStepper(label: L("mach.new.cpus"), value: $cpus)
+                    SQSelect(label: L("mach.new.mem"), options: ["2 GB", "4 GB", "8 GB", "16 GB", "32 GB"], selection: $memIdx)
+                }
+                SQSelect(label: L("mach.new.home"), options: [L("mach.home.rw"), L("mach.home.ro"), L("mach.home.none")], selection: $home)
+            }
+        } onSubmit: {
+            let settings = [
+                "cpus=\(cpus)",
+                "memory=\(["2 GB", "4 GB", "8 GB", "16 GB", "32 GB"][memIdx].replacingOccurrences(of: " ", with: "").lowercased())",
+                "home-mount=\(["rw", "ro", "none"][home])"
+            ]
+            do {
+                try await Commands.machineSet(name: name, settings: settings)
+                model.showToast(name + " · " + L("act.save"))
+                Store.shared.refresh()
+                return nil
+            } catch { return error.localizedDescription }
+        }
+        .onAppear {
+            guard let m = Store.shared.machines.first(where: { $0.name == name }) else { return }
+            cpus = m.cpus ?? 4
+            let mb = (m.memory ?? 0) / 1_073_741_824
+            let sizes = [2, 4, 8, 16, 32]
+            memIdx = sizes.firstIndex(of: Int(mb)) ?? 2
+            home = ["rw", "ro", "none"].firstIndex(of: m.homeMountValue) ?? 0
+        }
     }
 }
 
@@ -606,6 +813,7 @@ struct SQSheetView: View {
         case .tag(let img): SQTagImageSheet(source: img)
         case .loadImage(let cluster): SQLoadImageSheet(clusterName: cluster)
         case .systemLogs: SQSystemLogsSheet()
+        case .machineConfig(let name): SQMachineConfigSheet(name: name)
         }
     }
 }

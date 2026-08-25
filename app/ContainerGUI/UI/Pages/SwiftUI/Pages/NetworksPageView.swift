@@ -64,6 +64,9 @@ private struct NetworkCardView: View {
         SQCard {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 10) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(SQ.accent)
                     Text(network.name)
                         .font(.system(size: 15, weight: .bold))
                         .lineLimit(1)
@@ -84,9 +87,10 @@ private struct NetworkCardView: View {
                             Text(s6).font(SQ.mono).foregroundStyle(SQ.text)
                         }
                     }
-                    Text(L("net.attached") + ": —")
+                    Text(L("net.attached") + ": \(attachedText)")
                         .font(.system(size: 12))
                         .foregroundStyle(SQ.text2)
+                        .lineLimit(2)
                 }
                 .font(.system(size: 12))
                 if !network.isSystem {
@@ -99,5 +103,13 @@ private struct NetworkCardView: View {
             }
             .padding(16)
         }
+    }
+
+    private var attachedText: String {
+        let list = Store.shared.containers.compactMap { c -> String? in
+            guard c.status.networks?.contains(where: { $0.network == network.name }) == true else { return nil }
+            return c.id
+        }
+        return list.isEmpty ? "—" : list.joined(separator: ", ")
     }
 }

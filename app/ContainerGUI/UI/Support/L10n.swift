@@ -1,7 +1,54 @@
 import Foundation
 
+/// In-app language override. `auto` follows the system; otherwise a specific
+/// localization (e.g. "en", "zh-Hans") is forced regardless of OS settings.
+enum AppLanguage {
+    static let storageKey = "appLanguage"
+    static let available = ["auto", "zh-Hans", "en"]
+
+    static var current: String {
+        let v = UserDefaults.standard.string(forKey: storageKey) ?? "auto"
+        return v.isEmpty ? "auto" : v
+    }
+
+    static func set(_ code: String) {
+        UserDefaults.standard.set(code, forKey: storageKey)
+    }
+
+    static var displayName: String {
+        switch current {
+        case "zh-Hans": return "简体中文"
+        case "en": return "English"
+        default: return L("set.language.system")
+        }
+    }
+}
+
+enum LocaleTable {
+    private static var cache: [String: [String: String]] = [:]
+
+    static func load(_ lang: String) -> [String: String]? {
+        if let t = cache[lang] { return t }
+        let loc = lang == "en" ? "en" : "zh-hans"
+        guard let url = Bundle.module.url(forResource: "Localizable", withExtension: "strings",
+                                          subdirectory: nil, localization: loc),
+              let d = NSDictionary(contentsOf: url) as? [String: String] else { return nil }
+        cache[lang] = d
+        return d
+    }
+}
+
 func L(_ key: String, _ args: [String: String] = [:]) -> String {
-    var s = Bundle.module.localizedString(forKey: key, value: key, table: nil)
+    let lang = AppLanguage.current
+    var s: String
+    if lang == "auto" {
+        s = Bundle.module.localizedString(forKey: key, value: key, table: nil)
+        if s == key { s = LocaleTable.load("en")?[key] ?? key }
+    } else if let table = LocaleTable.load(lang) {
+        s = table[key] ?? Bundle.module.localizedString(forKey: key, value: key, table: nil)
+    } else {
+        s = Bundle.module.localizedString(forKey: key, value: key, table: nil)
+    }
     for (k, v) in args { s = s.replacingOccurrences(of: "{\(k)}", with: v) }
     return s
 }

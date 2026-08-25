@@ -57,6 +57,7 @@ final class Store: ObservableObject {
     @Published private(set) var dnsDomains: [String] = []
     @Published private(set) var registries: [String] = []
     @Published private(set) var systemStartedAt: Date?
+    @Published private(set) var languageVersion = 0
     var lastError: String?
 
     private var pollTimer: Timer?
@@ -67,6 +68,15 @@ final class Store: ObservableObject {
         route = r
         NotificationCenter.default.post(name: .routeDidChange, object: r)
         refresh()
+    }
+
+    /// Switch the in-app language, then nudge observers so `L()` strings (rendered
+    /// from `@ObservedObject store`) re-evaluate and the AppKit sidebar re-localizes.
+    func setLanguage(_ code: String) {
+        AppLanguage.set(code)
+        languageVersion += 1
+        NotificationCenter.default.post(name: .storeDidUpdate, object: nil)
+        NotificationCenter.default.post(name: .keymapChanged, object: nil)
     }
 
     func start() {
@@ -86,14 +96,14 @@ final class Store: ObservableObject {
             async let ne = Commands.listNetworks()
             async let ma = Commands.listMachines()
             async let cl = Commands.k8sClusters()
-async let st = Commands.systemStatus()
+            async let st = Commands.systemStatus()
             let (c, i, v, n, m, k, s) = await (ct, im, vo, ne, ma, cl, st)
             NSLog("CGUI refresh done: status=%@ images=%d err=%@", s?.status ?? "nil", i.count, lastError ?? "-")
             self.containers = c
             self.images = i
             self.volumes = v
             self.networks = n
-            self.machines = m
+            self.machines = await self.enrichMachines(m)
             self.clusters = k
             let wasRunning = self.servicesRunning
             self.servicesRunning = (s?.status == "running")
@@ -102,6 +112,40 @@ async let st = Commands.systemStatus()
             if wasRunning != self.servicesRunning { self.refreshSystemInfo() }
             self.loading = false
             NotificationCenter.default.post(name: .storeDidUpdate, object: nil)
+        }
+    }
+
+    /// Merge `container machine inspect` detail (image, home mount, platform) into the list
+    /// rows while preserving the `default` flag that only `machine list` reports.
+    @MainActor
+    private func enrichMachines(_ list: [MachineResourceJSON]) async -> [MachineResourceJSON] {
+        guard !list.isEmpty else { return list }
+        return await withTaskGroup(of: (String, MachineResourceJSON?).self) { group in
+            for m in list {
+                group.addTask {
+                    let detail = await Commands.inspectMachine(m.name)
+                    return (m.name, detail)
+                }
+            }
+            var details: [String: MachineResourceJSON] = [:]
+            for await (name, detail) in group where detail != nil {
+                details[name] = detail
+            }
+            return list.map { m in
+                guard let d = details[m.name] else { return m }
+                return MachineResourceJSON(
+                    diskSize: d.diskSize ?? m.diskSize,
+                    cpus: d.cpus ?? m.cpus,
+                    id: m.id,
+                    default: m.default,
+                    createdDate: d.createdDate ?? m.createdDate,
+                    memory: d.memory ?? m.memory,
+                    status: d.status ?? m.status,
+                    homeMount: d.homeMount ?? m.homeMount,
+                    image: d.image ?? m.image,
+                    platform: d.platform ?? m.platform
+                )
+            }
         }
     }
 
@@ -123,7 +167,10 @@ async let st = Commands.systemStatus()
 
     var runningCount: Int { containers.filter(\.isRunning).count }
     var cliVersion: String {
-        versions.first { $0.appName == "container" }.map { "\($0.version ?? "") (\($0.buildType ?? ""))" } ?? "—"
+        versions.first { $0.appName == "container" }.map { v in
+            let commit = (v.commit ?? "").prefix(7)
+            return commit.isEmpty ? "\(v.version ?? "")" : "\(v.version ?? "") (\(v.buildType ?? "")/\(commit))"
+        } ?? "—"
     }
     var apiVersion: String {
         versions.first { $0.appName == "container-apiserver" }?.version ?? "—"

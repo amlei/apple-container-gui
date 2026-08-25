@@ -86,9 +86,20 @@ struct OverviewPageView: View {
                         Button(L("act.pruneVolumes")) { prune("volumes", confirm: true) }
                         Button(L("act.pruneNetworks")) { prune("networks", confirm: true) }
                     } label: {
-                        SQButton(title: L("act.maintain"), icon: "arrow.3.trianglepath", small: true) {}
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 11.5, weight: .medium))
+                            Text(L("act.maintain"))
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(SQ.text)
+                        .padding(.horizontal, 10)
+                        .frame(height: 26)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(SQ.cardBg))
+                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(SQ.hairlineStrong, lineWidth: 0.5))
                     }
                     .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
                     .fixedSize()
                 }
                 .padding(.top, 15)
@@ -98,6 +109,10 @@ struct OverviewPageView: View {
                     diskRow(label: L("ov.disk.containers"), section: store.df?.containers)
                     Divider()
                     diskRow(label: L("ov.disk.volumes"), section: store.df?.volumes)
+                    if store.df?.cache != nil {
+                        Divider()
+                        diskRow(label: L("ov.disk.cache"), section: store.df?.cache)
+                    }
                 }
                 .padding(.bottom, 16)
             }
@@ -125,24 +140,22 @@ struct OverviewPageView: View {
                     let recFrac = tot > 0 ? min(1, CGFloat(rec) / CGFloat(tot)) : 0
                     HStack(spacing: 0) {
                         Rectangle().fill(SQ.accent).frame(width: w * usedFrac)
-                        Rectangle().fill(SQ.orange.opacity(0.75)).frame(width: w * recFrac)
+                        DiskStripes().frame(width: w * recFrac)
                     }
                     .background(Rectangle().fill(SQ.fill1))
                 }
                 .frame(height: 7)
                 .clipShape(Capsule())
-                Text(metaText(active: active, rec: rec, tot: tot))
-                    .font(SQ.monoSmall)
+                (Text(Fmt.bytes(active)).font(SQ.monoSmall).bold()
+                    + Text(" \(L("ov.disk.reclaimable")) \(Fmt.bytes(rec)) · \(Fmt.bytes(tot))")
+                        .font(SQ.monoSmall))
                     .foregroundStyle(SQ.text2)
                     .monospacedDigit()
+                    .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .padding(.vertical, 9)
-    }
-
-    private func metaText(active: UInt64, rec: UInt64, tot: UInt64) -> String {
-        "\(Fmt.bytes(active)) \(L("ov.disk.reclaimable")) \(Fmt.bytes(rec)) · \(Fmt.bytes(tot))"
     }
 
     private var serviceCard: some View {
@@ -205,5 +218,40 @@ struct OverviewPageView: View {
         } else {
             run()
         }
+    }
+}
+
+/// Diagonal orange/gold stripes used for the reclaimable portion of a disk bar
+/// (matches the design/ prototype).
+struct DiskStripes: View {
+    private static let tileSize: CGFloat = 20
+    private static let tile: NSImage = {
+        let img = NSImage(size: NSSize(width: tileSize, height: tileSize))
+        img.lockFocus()
+        let gold = NSColor(calibratedRed: 0.98, green: 0.80, blue: 0.35, alpha: 1)
+        let orange = NSColor(calibratedRed: 1.0, green: 0.58, blue: 0.0, alpha: 1)
+        gold.setFill()
+        NSRect(x: 0, y: 0, width: tileSize, height: tileSize).fill()
+        let stripeW: CGFloat = 5
+        let period = stripeW * 2
+        orange.setFill()
+        var x: CGFloat = -tileSize - period
+        while x < tileSize {
+            let p = NSBezierPath()
+            p.move(to: NSPoint(x: x, y: tileSize))
+            p.line(to: NSPoint(x: x + tileSize, y: 0))
+            p.line(to: NSPoint(x: x + tileSize + stripeW, y: 0))
+            p.line(to: NSPoint(x: x + stripeW, y: tileSize))
+            p.close()
+            p.fill()
+            x += period
+        }
+        img.unlockFocus()
+        return img
+    }()
+
+    var body: some View {
+        Image(nsImage: Self.tile)
+            .resizable(resizingMode: .tile)
     }
 }

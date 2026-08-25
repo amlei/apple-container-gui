@@ -73,45 +73,12 @@ struct ContainersPageView: View {
         .foregroundStyle(SQ.text2)
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
-        .background(SQ.fill1)
+        .background(SQ.cardBg.opacity(0.88))
+        .overlay(alignment: .bottom) { Rectangle().fill(SQ.hairlineStrong).frame(height: 0.5) }
     }
 
     @ViewBuilder private func containerMenu(for c: ManagedContainer) -> some View {
-        if c.isRunning {
-            Button(L("act.stop")) { Task { try? await Commands.containerAction("stop", ids: [c.id]); Store.shared.refresh() } }
-            Button(role: .destructive, action: {
-                model.confirm(L("kill.title", ["id": c.id]), message: L("kill.msg"), confirm: L("confirm.kill"), danger: true) {
-                    Task { try? await Commands.containerAction("kill", ids: [c.id]); Store.shared.refresh() }
-                }
-            }) { Text(L("act.kill")) }
-        } else {
-            Button(L("act.start")) { Task { try? await Commands.containerAction("start", ids: [c.id]); Store.shared.refresh() } }
-        }
-        Divider()
-        Button(L("act.copyId")) {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(c.id, forType: .string)
-            model.showToast(L("copied"))
-        }
-        Button(L("act.exportFs")) {
-            let dlg = NSSavePanel()
-            dlg.nameFieldStringValue = c.id + ".tar"
-            if let w = NSApp.keyWindow {
-                dlg.beginSheetModal(for: w) { resp in
-                    guard resp == .OK, let url = dlg.url else { return }
-                    Task {
-                        try? await Commands.exportContainer(c.id, to: url.path)
-                        model.showToast(L("export.doneMsg", ["path": url.path]))
-                    }
-                }
-            }
-        }
-        Divider()
-        Button(role: .destructive) {
-            model.confirm(L("del.ct.title", ["id": c.id]), message: L("del.ct.msg"), confirm: L("confirm.yes"), danger: true) {
-                Task { try? await Commands.containerAction("delete", ids: [c.id]); Store.shared.refresh() }
-            }
-        } label: { Text(L("act.delete")) }
+        containerActionMenu(c, model)
     }
 
     private func loadStats() {
@@ -193,11 +160,18 @@ private struct SQContainerRow: View {
                         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? SQ.fill2 : Color.clear))
                 }
                 .buttonStyle(.plain)
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(SQ.text2)
-                    .frame(width: 24, height: 24)
-                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? SQ.fill2 : Color.clear))
+                Menu {
+                    containerActionMenu(container, model)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SQ.text2)
+                        .frame(width: 24, height: 24)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(hovering ? SQ.fill2 : Color.clear))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
             .frame(width: 56)
             .opacity(hovering ? 1 : 0)
@@ -239,7 +213,90 @@ private struct SQContainerRow: View {
         container.isRunning ? Fmt.bytes(stats?.memoryUsageBytes ?? 0) : "—"
     }
     private var portsText: String {
-        let ip = container.ip
-        return ip == "—" || ip.isEmpty ? "" : ip
+        let pairs = container.portPairs
+        guard !pairs.isEmpty else { return "" }
+        return pairs.map { "\($0.host)→\($0.ct)/\($0.proto)" }.joined(separator: ", ")
     }
+}
+
+@ViewBuilder func containerActionMenu(_ c: ManagedContainer, _ model: SQAppModel) -> some View {
+    if c.isRunning {
+        Button { Task { try? await Commands.containerAction("stop", ids: [c.id]); Store.shared.refresh() } } label: {
+            Label(L("act.stop"), systemImage: "stop.fill")
+        }
+        Button(role: .destructive, action: {
+            model.confirm(L("kill.title", ["id": c.id]), message: L("kill.msg"), confirm: L("confirm.kill"), danger: true) {
+                Task { try? await Commands.containerAction("kill", ids: [c.id]); Store.shared.refresh() }
+            }
+        }) { Label(L("act.kill"), systemImage: "bolt.fill").foregroundStyle(SQ.red) }
+    } else {
+        Button { Task { try? await Commands.containerAction("start", ids: [c.id]); Store.shared.refresh() } } label: {
+            Label(L("act.start"), systemImage: "play.fill")
+        }
+    }
+    Divider()
+    Button {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(c.id, forType: .string)
+        model.showToast(L("copied"))
+    } label: {
+        Label(L("act.copyId"), systemImage: "doc.on.doc")
+    }
+    Button {
+        let dlg = NSSavePanel()
+        dlg.nameFieldStringValue = c.id + ".tar"
+        if let w = NSApp.keyWindow {
+            dlg.beginSheetModal(for: w) { resp in
+                guard resp == .OK, let url = dlg.url else { return }
+                Task {
+                    try? await Commands.exportContainer(c.id, to: url.path)
+                    model.showToast(L("export.doneMsg", ["path": url.path]))
+                }
+            }
+        }
+    } label: {
+        Label(L("act.exportFs"), systemImage: "square.and.arrow.up")
+    }
+    Divider()
+    Button(role: .destructive) {
+        model.confirm(L("del.ct.title", ["id": c.id]), message: L("del.ct.msg"), confirm: L("confirm.yes"), danger: true) {
+            Task { try? await Commands.containerAction("delete", ids: [c.id]); Store.shared.refresh() }
+        }
+    } label: { Label(L("act.delete"), systemImage: "trash").foregroundStyle(SQ.red) }
+}
+
+@ViewBuilder func imageActionMenu(_ image: ImageResourceJSON, _ model: SQAppModel) -> some View {
+    Button { model.show(.run(image: image.ref)) } label: {
+        Label(L("act.runContainer"), systemImage: "play.fill")
+    }
+    Button {
+        Task { try? await Commands.pushImage(image.ref); model.showToast(L("push.doneMsg", ["ref": image.ref])) }
+    } label: {
+        Label(L("act.push"), systemImage: "arrow.up")
+    }
+    Button { model.show(.tag(image: image.ref)) } label: {
+        Label(L("act.tagNew"), systemImage: "tag")
+    }
+    Divider()
+    Button {
+        let dlg = NSSavePanel()
+        dlg.nameFieldStringValue = image.ref.components(separatedBy: "/").last?.replacingOccurrences(of: ":", with: "_").appending(".tar") ?? "image.tar"
+        if let w = NSApp.keyWindow {
+            dlg.beginSheetModal(for: w) { resp in
+                guard resp == .OK, let url = dlg.url else { return }
+                Task {
+                    try? await Commands.saveImage(image.ref, to: url.path)
+                    model.showToast(L("saved.doneMsg", ["path": url.path]))
+                }
+            }
+        }
+    } label: {
+        Label(L("act.saveTar"), systemImage: "arrow.down")
+    }
+    Divider()
+    Button(role: .destructive) {
+        model.confirm(L("del.img.title", ["ref": image.ref]), message: L("del.img.msg"), confirm: L("confirm.yes"), danger: true) {
+            Task { try? await Commands.deleteImages([image.ref]); Store.shared.refresh() }
+        }
+    } label: { Label(L("act.delete"), systemImage: "trash").foregroundStyle(SQ.red) }
 }

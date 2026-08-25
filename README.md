@@ -1,66 +1,63 @@
 # Container GUI
 
-Apple [container](https://github.com/apple/container) 的原生 macOS 桌面客户端(AppKit,Swift)。
+A native macOS desktop client for Apple's [`container`](https://github.com/apple/container) CLI, built with AppKit and SwiftUI.
 
-`design/` 是设计原型(浏览器版,仅作视觉参考);`app/` 是正式产品。
+The app lets you manage containers, images, volumes, networks, machines, and Kubernetes clusters directly from a native window: run/pull/build images, inspect and stream container logs, watch live CPU/memory/network metrics, open a terminal, and manage local resources — all backed by the real `container` CLI (no mock data).
 
-## 目录结构
+The `design/` folder is the browser-based visual prototype (HTML/JS/CSS) used as the design reference; `app/` is the production macOS application.
 
-```
-apple-container-gui/
-├── design/                      # 浏览器原型(设计参考)
-│   ├── index.html  shots.js
-│   └── assets/
-└── app/                         # 正式产品:AppKit 应用
-    ├── Package.swift            # SPM;executableTarget 直接指向 ContainerGUI/
-    ├── ExceptionCatcher/        # ObjC @try 捕获器(诊断 AppKit 吞异常)
-    ├── Scripts/
-    │   ├── build.sh             # swift build -c release → 组装 Container.app → ad-hoc 签名
-    │   └── dev.sh               # 构建 + 启动
-    └── ContainerGUI/
-        ├── App/                 # main、AppDelegate、MainWindow(侧边栏 + 内容 + Inspector)
-        ├── Core/
-        │   ├── CLIRunner.swift  # Process 封装(同步/流式)
-        │   ├── Models.swift     # CLI JSON 输出的 Codable 模型
-        │   ├── Commands.swift   # 全部 CLI 命令的类型化封装
-        │   └── Store.swift      # 状态中心:5s 轮询 + NotificationCenter 分发
-        ├── UI/
-        │   ├── Pages/           # 概览/容器/镜像/存储卷/网络/虚拟机/Kubernetes/设置
-        │   ├── Sheets/          # 运行/拉取/构建/新建卷·网络·虚拟机·集群/登录/标签/导入
-        │   ├── Inspector/       # 详情抽屉(信息/日志跟随/监控图表/PTY 终端)、系统日志
-        │   ├── Components/      # 图表、KV 编辑器、Toast、空态、确认面板
-        │   └── Support/         # 主题、本地化(L10n)、格式化
-        └── Resources/           # Info.plist 由 build.sh 生成;en.lproj / zh-Hans.lproj
-```
+## Requirements
 
-## 构建与运行
+- macOS 15 or later
+- Apple `container` CLI (auto-detected at `/usr/local/bin/container`, `/opt/homebrew/bin/container`, or `/usr/bin/container`)
 
-要求:macOS 15+,已安装 Apple `container` CLI(`/usr/local/bin/container`)。
+## Build & Run
+
+From `app/`:
 
 ```bash
-cd app
-./Scripts/dev.sh      # debug 构建 + 启动
-# 或
-./Scripts/build.sh    # release 构建 → app/build/Container.app
+./Scripts/dev.sh      # debug build + launch
+# or
+./Scripts/build.sh    # release build -> app/build/Container.app
 open build/Container.app
 ```
 
-## 功能
+## Features
 
-- **概览**:统计磁贴、磁盘用量(可回收量)、服务状态(CLI/API 版本、默认注册表、DNS)
-- **容器**:过滤/搜索、启停/强杀/删除/导出 FS、详情抽屉(信息 · 日志跟随 · 监控图表 · PTY 终端)
-- **镜像**:拉取、构建、推送、标签、导出 tar、详情(含 CMD/摘要)、删除
-- **存储卷**:创建(容量/journal 模式)、删除、占用保护
-- **网络**:创建(v4/v6/internal)、删除(系统网络保护,需 macOS 26+)
-- **虚拟机**:创建(CPU/内存/home-mount/嵌套虚拟化/设默认)、停止、删除
-- **Kubernetes**:`container k8s` 集群管理(创建/启动/导入镜像/写 kubeconfig/删除,实验性)
-- **设置**:主题、服务启停、系统日志、内核安装、DNS 域、注册表登录、属性表
+- **Overview** — running counts, disk-usage bars (with reclaimable stripes), system service status & versions
+- **Containers** — filter/search, start/stop/kill/delete, detail drawer with info · logs (follow/boot/tail) · monitoring charts · PTY terminal
+- **Images** — pull, build, tag, push, save/load tar, layer history
+- **Volumes** — create (size/journal mode), delete
+- **Networks** — create (v4/v6/internal), delete, macOS 26 note
+- **Machines** — create/configure/start/stop/set-default, shell & logs drawers
+- **Kubernetes** — create clusters, load images, write kubeconfig (experimental)
+- **Settings** — theme (auto/light/dark), language, service controls, kernel, DNS, registry logins, keyboard-shortcut rebinding
+- Full localization (简体中文 / English) and light/dark appearance
 
-界面语言跟随系统(简体中文 / English)。
+## Project Structure
 
-## 实现说明
+```
+apple-container-gui/
+├── app/                       # Production macOS app (Swift Package)
+│   ├── Package.swift
+│   ├── ContainerGUI/
+│   │   ├── App/               # lifecycle, menus, main window, sidebar
+│   │   ├── Core/              # CLIRunner, Models, Commands, Store, Keymap
+│   │   ├── UI/                # Pages, Sheets, Inspector, Components, Support
+│   │   └── Resources/         # en / zh-Hans localizations
+│   ├── ExceptionCatcher/      # Objective-C exception bridge
+│   └── Scripts/               # build.sh / dev.sh
+├── design/                    # Browser visual prototype (design reference)
+└── assets/                    # Project assets (logo)
+```
 
-- 数据层零 mock:全部通过 `Process` 驱动真实 `container` CLI(`--format json` 解码)
-- 终端标签使用 PTY(`openpty`)运行 `container exec -it <id> /bin/sh`
-- 日志/系统日志通过流式子进程(`logs -f` / `system logs`)实时追加
-- 监控图表轮询 `container stats --no-stream --format json` 自绘 CAShapeLayer 折线
+## Development
+
+- Run `swift build` from `app/` for every change and smoke-test affected screens against the real CLI.
+- No automated test target exists yet; when adding one, use Swift Testing/XCTest and run `swift test --filter <TestName>`.
+- User-facing strings use `L("key")` and must be added to both `en.lproj` and `zh-Hans.lproj` `Localizable.strings`.
+- Page UI mirrors `design/`; keep new view code in its designated `UI/` subfolder.
+
+## License
+
+MIT

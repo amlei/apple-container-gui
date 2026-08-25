@@ -75,8 +75,8 @@ private struct K8sCardView: View {
                 }
                 VStack(alignment: .leading, spacing: 5) {
                     kvLine(L("k8.nodeImage"), cluster.nodeImage)
-                    kvLine(L("mach.resources"), "\(cluster.nodes) CPU")
-                    kvLine(L("k8.images"), "\(cluster.nodes)")
+                    kvLine(L("mach.resources"), "—")
+                    kvLine(L("k8.images"), "—")
                     kvLine(L("mach.created"), "—")
                 }
                 .font(.system(size: 12))
@@ -90,32 +90,38 @@ private struct K8sCardView: View {
                         }
                     }
                     Spacer()
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(SQ.text2)
-                        .frame(width: 26, height: 26)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(SQ.fill1))
-                        .contextMenu {
-                            if !cluster.isRunning {
-                                Button(L("act.start")) {
-                                    Task { try? await Commands.k8sStart(cluster.name); Store.shared.refresh() }
-                                }
-                            }
-                            if cluster.isRunning {
-                                Button(L("k8.loadimg.short")) { model.show(.loadImage(cluster: cluster.name)) }
-                                Button(L("k8.writecfg")) {
-                                    model.confirm(L("k8.writecfg"), message: L("k8.writecfg.msg"), confirm: L("act.confirm")) {
-                                        Task { try? await Commands.k8sWriteConfig(cluster.name); model.showToast(L("k8.writecfg.doneMsg", ["n": cluster.name])) }
-                                    }
-                                }
-                            }
-                            Divider()
-                            Button(role: .destructive) {
-                                model.confirm(L("del.k8s.title", ["n": cluster.name]), message: L("del.k8s.msg"), confirm: L("confirm.yes"), danger: true) {
-                                    Task { try? await Commands.k8sDelete(cluster.name); Store.shared.refresh() }
-                                }
-                            } label: { Text(L("act.delete")) }
+                    Menu {
+                        if !cluster.isRunning {
+                            Button {
+                                Task { try? await Commands.k8sStart(cluster.name); Store.shared.refresh() }
+                            } label: { Label(L("act.start"), systemImage: "play.fill") }
                         }
+                        if cluster.isRunning {
+                            Button { model.show(.loadImage(cluster: cluster.name)) } label: {
+                                Label(L("k8.loadimg.short"), systemImage: "arrow.up")
+                            }
+                            Button {
+                                model.confirm(L("k8.writecfg"), message: L("k8.writecfg.msg"), confirm: L("act.confirm")) {
+                                    Task { try? await Commands.k8sWriteConfig(cluster.name); model.showToast(L("k8.writecfg.doneMsg", ["n": cluster.name])) }
+                                }
+                            } label: { Label(L("k8.writecfg"), systemImage: "key") }
+                        }
+                        Divider()
+                        Button(role: .destructive) {
+                            model.confirm(L("del.k8s.title", ["n": cluster.name]), message: L("del.k8s.msg"), confirm: L("confirm.yes"), danger: true) {
+                                Task { try? await Commands.k8sDelete(cluster.name); Store.shared.refresh() }
+                            }
+                        } label: { Label(L("act.delete"), systemImage: "trash").foregroundStyle(SQ.red) }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(SQ.text2)
+                            .frame(width: 26, height: 26)
+                            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(SQ.fill1))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
                 }
             }
             .padding(16)
