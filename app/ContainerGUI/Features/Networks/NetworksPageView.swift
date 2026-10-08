@@ -7,9 +7,12 @@ struct NetworksPageView: View {
     @State private var noteDismissed = false
 
     var body: some View {
-        PageScaffold(title: L("nav.networks")) {
-            SQButton(title: L("net.new.title"), icon: "plus", primary: true) { model.show(.newNetwork) }
-        } body: {
+        PageScaffold(
+            title: L("nav.networks"),
+            toolbar: [ToolbarAction(id: "tb-new-network", symbol: "plus", label: L("net.new.title"), primary: true) {
+                model.show(.newNetwork)
+            }]
+        ) {
             VStack(spacing: 12) {
                 if !store.servicesRunning { SQOfflineBanner() }
                 if !noteDismissed {
@@ -62,54 +65,140 @@ private struct NetworkCardView: View {
 
     var body: some View {
         SQCard {
-            VStack(alignment: .leading, spacing: 11) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
                     Image(systemName: "globe")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(SQ.accent)
+                        .frame(width: 28, height: 28)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SQ.accentTint))
                     Text(network.name)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 14.5, weight: .bold))
                         .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(network.name)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if network.isSystem { SQBadge(text: L("net.default.tag"), accent: true) }
                     if network.configuration.options?["internal"] != nil || network.name.hasPrefix("internal") {
                         SQBadge(text: L("net.internal"), icon: "shield")
                     }
                 }
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        Text(L("net.subnet4")).foregroundStyle(SQ.text2)
-                        Text(network.status?.ipv4Subnet ?? "—").font(SQ.mono).foregroundStyle(SQ.text)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                .overlay(alignment: .bottom) { Rectangle().fill(SQ.hairline).frame(height: 0.5) }
+
+                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 9) {
+                    GridRow {
+                        kvLabel(L("net.subnet4"))
+                        Text(network.status?.ipv4Subnet ?? "—")
+                            .font(SQ.mono)
+                            .foregroundStyle(network.status?.ipv4Subnet != nil ? SQ.text : SQ.text3)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    if let s6 = network.status?.ipv6Subnet, !s6.isEmpty {
-                        HStack(spacing: 6) {
-                            Text(L("net.subnet6")).foregroundStyle(SQ.text2)
-                            Text(s6).font(SQ.mono).foregroundStyle(SQ.text)
+                    GridRow {
+                        kvLabel(L("net.subnet6"))
+                        Text(network.status?.ipv6Subnet ?? "—")
+                            .font(SQ.mono)
+                            .foregroundStyle(network.status?.ipv6Subnet != nil ? SQ.text : SQ.text3)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    GridRow {
+                        kvLabel(L("net.attached"))
+                        if attached.isEmpty {
+                            Text("—").foregroundStyle(SQ.text3)
+                        } else {
+                            FlowLayout(spacing: 5) {
+                                ForEach(attached, id: \.self) { name in
+                                    SQChip(text: name)
+                                }
+                            }
                         }
                     }
-                    Text(L("net.attached") + ": \(attachedText)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(SQ.text2)
-                        .lineLimit(2)
                 }
                 .font(.system(size: 12))
-                if !network.isSystem {
-                    Divider()
-                    HStack {
-                        Spacer()
-                        SQButton(title: L("act.delete"), icon: "trash", danger: true, small: true, action: onDelete)
-                    }
-                }
+                .padding(16)
+
+                Spacer(minLength: 0)
+
+                footer
             }
-            .padding(16)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    private var attachedText: String {
-        let list = Store.shared.containers.compactMap { c -> String? in
+    private var footer: some View {
+        HStack(spacing: 8) {
+            if network.isSystem {
+                HStack(spacing: 6) {
+                    Image(systemName: "shield")
+                        .font(.system(size: 11, weight: .medium))
+                    Text(L("del.net.system"))
+                        .font(.system(size: 11.5))
+                }
+                .foregroundStyle(SQ.text3)
+                Spacer(minLength: 0)
+            } else {
+                Spacer(minLength: 0)
+                SQButton(title: L("act.delete"), icon: "trash", danger: true, small: true, action: onDelete)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 46, alignment: .center)
+        .overlay(alignment: .top) { Rectangle().fill(SQ.hairline).frame(height: 0.5) }
+    }
+
+    private func kvLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(SQ.text2)
+            .lineLimit(1)
+    }
+
+    private var attached: [String] {
+        Store.shared.containers.compactMap { c -> String? in
             guard c.status.networks?.contains(where: { $0.network == network.name }) == true else { return nil }
             return c.id
         }
-        return list.isEmpty ? "—" : list.joined(separator: ", ")
+    }
+}
+
+// MARK: - Flow layout (wrapping chips)
+
+/// Minimal wrapping layout so attached-container chips wrap instead of
+/// overflowing the card.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 5
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: maxWidth == .infinity ? x : maxWidth, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: .unspecified)
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }

@@ -93,7 +93,8 @@ const Mock = (() => {
 
   const registries = [
     { server: 'docker.io', user: 'amlei', scheme: 'auto' },
-    { server: 'ghcr.io', user: 'amlei-dev', scheme: 'https' }
+    { server: 'registry.cn-hangzhou.aliyuncs.com', user: 'qshuai162@qq.com', scheme: 'https' },
+    { server: 'registry.gitlab.example-organization-subdomain.dev', user: 'builder-service-account@company-team.io', scheme: 'https' }
   ];
 
   const dnsDomains = ['test'];

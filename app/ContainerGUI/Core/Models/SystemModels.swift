@@ -29,3 +29,13 @@ struct DfReportJSON: Codable {
     let volumes: DfSection?
     let cache: DfSection?
 }
+
+// MARK: - Registry login (`container registry list --format json`)
+
+struct RegistryLoginJSON: Codable {
+    let id: String?
+    let name: String?
+    let username: String?
+
+    var server: String { name ?? id ?? "" }
+}

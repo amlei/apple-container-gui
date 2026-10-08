@@ -10,12 +10,20 @@ struct ContainersPageView: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
-        PageScaffold(title: L("nav.containers")) {
-            SQSegmented(options: [L("filter.all"), L("filter.running"), L("filter.stopped")], selection: $filter)
-            SQSearchField(placeholder: L("search.ph.containers"), text: $search)
-                .focused($searchFocused)
-            SQButton(title: L("act.runContainer"), icon: "plus", primary: true) { model.show(.run(image: nil)) }
-        } body: {
+        PageScaffold(
+            title: L("nav.containers"),
+            toolbar: [ToolbarAction(id: "tb-run-container", symbol: "plus", label: L("act.runContainer"), primary: true) {
+                model.show(.run(image: nil))
+            }],
+            filter: AnyView(
+                HStack(spacing: 10) {
+                    SQSegmented(options: [L("filter.all"), L("filter.running"), L("filter.stopped")], selection: $filter)
+                    SQSearchField(placeholder: L("search.ph.containers"), text: $search)
+                        .focused($searchFocused)
+                    Spacer()
+                }
+            )
+        ) {
             VStack(spacing: 12) {
                 if !store.servicesRunning { SQOfflineBanner() }
                 if filtered.isEmpty {

@@ -7,8 +7,6 @@ struct OverviewPageView: View {
 
     var body: some View {
         PageScaffold(title: L("nav.overview")) {
-            EmptyView()
-        } body: {
             VStack(alignment: .leading, spacing: SQ.gap) {
                 tileGrid
                 HStack(alignment: .top, spacing: 14) {
@@ -174,7 +172,7 @@ struct OverviewPageView: View {
                     (L("ov.service.version.cli"), "container \(store.cliVersion)"),
                     (L("ov.service.version.api"), store.apiVersion),
                     (L("ov.service.kernel"), kernel),
-                    (L("ov.service.registry"), store.registries.first ?? L("ct.d.none")),
+                    (L("ov.service.registry"), store.registries.first.map { "\($0.server) · \($0.username ?? "—")" } ?? L("ct.d.none")),
                     (L("ov.service.dns"), store.dnsDomains.first.map { ".\($0)" } ?? "—"),
                     (L("ov.service.uptime"), uptimeText),
                 ])

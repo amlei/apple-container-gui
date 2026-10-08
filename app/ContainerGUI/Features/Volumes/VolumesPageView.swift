@@ -8,11 +8,19 @@ struct VolumesPageView: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
-        PageScaffold(title: L("nav.volumes")) {
-            SQSearchField(placeholder: L("search.ph.volumes"), text: $search)
-                .focused($searchFocused)
-            SQButton(title: L("vol.new.title"), icon: "plus", primary: true) { model.show(.newVolume) }
-        } body: {
+        PageScaffold(
+            title: L("nav.volumes"),
+            toolbar: [ToolbarAction(id: "tb-new-volume", symbol: "plus", label: L("vol.new.title"), primary: true) {
+                model.show(.newVolume)
+            }],
+            filter: AnyView(
+                HStack(spacing: 10) {
+                    SQSearchField(placeholder: L("search.ph.volumes"), text: $search)
+                        .focused($searchFocused)
+                    Spacer()
+                }
+            )
+        ) {
             VStack(spacing: 12) {
                 if !store.servicesRunning { SQOfflineBanner() }
                 if filtered.isEmpty {

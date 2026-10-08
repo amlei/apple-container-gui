@@ -6,9 +6,12 @@ struct MachinesPageView: View {
     @EnvironmentObject private var model: SQAppModel
 
     var body: some View {
-        PageScaffold(title: L("nav.machines")) {
-            SQButton(title: L("mach.new.title"), icon: "plus", primary: true) { model.show(.newMachine) }
-        } body: {
+        PageScaffold(
+            title: L("nav.machines"),
+            toolbar: [ToolbarAction(id: "tb-new-machine", symbol: "plus", label: L("mach.new.title"), primary: true) {
+                model.show(.newMachine)
+            }]
+        ) {
             VStack(alignment: .leading, spacing: 12) {
                 if !store.servicesRunning { SQOfflineBanner() }
                 Text(L("mach.sub"))

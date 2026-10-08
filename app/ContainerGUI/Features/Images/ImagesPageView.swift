@@ -8,12 +8,20 @@ struct ImagesPageView: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
-        PageScaffold(title: L("nav.images")) {
-            SQSearchField(placeholder: L("search.ph.images"), text: $search)
-                .focused($searchFocused)
-            SQButton(title: L("act.build"), icon: "hammer") { model.show(.build) }
-            SQButton(title: L("act.pull"), icon: "arrow.down", primary: true) { model.show(.pull) }
-        } body: {
+        PageScaffold(
+            title: L("nav.images"),
+            toolbar: [
+                ToolbarAction(id: "tb-build", symbol: "hammer", label: L("act.build")) { model.show(.build) },
+                ToolbarAction(id: "tb-pull", symbol: "arrow.down", label: L("act.pull"), primary: true) { model.show(.pull) },
+            ],
+            filter: AnyView(
+                HStack(spacing: 10) {
+                    SQSearchField(placeholder: L("search.ph.images"), text: $search)
+                        .focused($searchFocused)
+                    Spacer()
+                }
+            )
+        ) {
             VStack(spacing: 12) {
                 if !store.servicesRunning { SQOfflineBanner() }
                 if filtered.isEmpty {

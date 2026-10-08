@@ -179,7 +179,7 @@ svg { display: block; fill: none; stroke: currentColor; stroke-linecap: round; s
   position: absolute; inset: 0;
   overflow-y: auto; overscroll-behavior: contain;
   background: var(--content-bg);
-  padding: 22px 26px 34px;
+  padding: 0 26px 34px;
 }
 .content::-webkit-scrollbar { width: 14px; }
 .content::-webkit-scrollbar-thumb { background: var(--fill-2); border-radius: 99px; border: 4px solid transparent; background-clip: content-box; }

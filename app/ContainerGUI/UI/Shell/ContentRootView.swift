@@ -98,42 +98,42 @@ struct ContentRootView: View {
     }
 }
 
-// MARK: - Page scaffold (title + actions + body)
+// MARK: - Page scaffold (native toolbar via ToolbarBridge + scrolling body)
 
-struct PageScaffold<Actions: View, Content: View>: View {
+struct PageScaffold<Content: View>: View {
     let title: String
-    let actions: () -> Actions
+    var toolbar: [ToolbarAction]
+    var filter: AnyView?
     let content: () -> Content
 
     init(title: String,
-         @ViewBuilder actions: @escaping () -> Actions,
+         toolbar: [ToolbarAction] = [],
+         filter: AnyView? = nil,
          @ViewBuilder body: @escaping () -> Content) {
         self.title = title
-        self.actions = actions
+        self.toolbar = toolbar
+        self.filter = filter
         self.content = body
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .center, spacing: 14) {
-                    Text(title)
-                        .font(.system(size: 24, weight: .bold))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .layoutPriority(1)
-                    Spacer(minLength: 8)
-                    HStack(spacing: 10) { actions() }
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                .frame(minHeight: 34)
                 content()
             }
-            .padding(.top, 18)
             .padding(.horizontal, 26)
+            .padding(.top, 18)
             .padding(.bottom, 34)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let filter {
+                filter
+                    .padding(.horizontal, 26)
+                    .padding(.vertical, 10)
+            }
+        }
+        .onAppear { ToolbarBridge.shared.setActions(toolbar) }
     }
 }
 

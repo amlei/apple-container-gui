@@ -265,8 +265,17 @@ function render() {
   const v = VIEWS[S.route];
   const head = `<header class="page-head"><h1>${t(v.title)}</h1>
     <div class="page-actions">${v.toolbar ? v.toolbar() : ''}</div></header>`;
-  $('#view-root').innerHTML = head + v.render();
+  const root = $('#view-root');
+  root.dataset.scrolled = '0';
+  root.innerHTML = head + v.render();
   v.after && v.after();
+}
+function wireHeadScroll() {
+  const c = $('#view-root');
+  c.addEventListener('scroll', () => {
+    const on = c.scrollTop > 6 ? '1' : '0';
+    if (c.dataset.scrolled !== on) c.dataset.scrolled = on;
+  }, { passive: true });
 }
 function rerenderList() {
   const v = VIEWS[S.route];

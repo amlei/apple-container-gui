@@ -7,9 +7,12 @@ struct K8sPageView: View {
     @State private var noteDismissed = false
 
     var body: some View {
-        PageScaffold(title: L("nav.k8s")) {
-            SQButton(title: L("k8.new.title"), icon: "plus", primary: true) { model.show(.k8sNew) }
-        } body: {
+        PageScaffold(
+            title: L("nav.k8s"),
+            toolbar: [ToolbarAction(id: "tb-new-k8s", symbol: "plus", label: L("k8.new.title"), primary: true) {
+                model.show(.k8sNew)
+            }]
+        ) {
             VStack(alignment: .leading, spacing: 12) {
                 if !store.servicesRunning { SQOfflineBanner() }
                 if !noteDismissed {

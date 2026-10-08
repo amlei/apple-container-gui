@@ -14,8 +14,6 @@ struct SettingsPageView: View {
 
     var body: some View {
         PageScaffold(title: L("nav.settings")) {
-            EmptyView()
-        } body: {
             VStack(spacing: 16) {
                 appearanceGroup
                 serviceGroup
@@ -154,20 +152,73 @@ struct SettingsPageView: View {
 
     private var registriesGroup: some View {
         SQSettingsGroup(title: L("set.reg"), desc: L("set.reg.desc")) {
-            ForEach(store.registries, id: \.self) { r in
-                SQSettingsRow(label: r) {
-                    Text("—").font(SQ.mono).foregroundStyle(SQ.text2).frame(maxWidth: .infinity, alignment: .leading)
-                    SQButton(title: L("act.logout"), small: true) {
-                        model.confirm(r, message: L("set.reg.desc"), confirm: L("confirm.logout"), danger: true) {
-                            Task { try? await Commands.registryLogout(r); Store.shared.refreshSystemInfo() }
-                        }
-                    }
-                }
+            if store.registries.isEmpty {
+                Text(L("set.reg.none"))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(SQ.text3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 14)
+            } else {
+                registryTable
             }
             SQSettingsRow(label: "") {
                 SQButton(title: L("act.login"), icon: "key", primary: true, small: true) { model.show(.registryLogin) }
+                    .padding(.top, 12)
             }
         }
+    }
+
+    private var registryTable: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                regHeadCell(L("set.reg.server"))
+                regHeadCell(L("set.reg.user"))
+                regHeadCell(L("set.reg.actions"), width: 96, trailing: true)
+            }
+            ForEach(store.registries, id: \.server) { r in
+                HStack(spacing: 14) {
+                    Text(r.server)
+                        .font(SQ.mono)
+                        .foregroundStyle(SQ.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(r.server)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 6) {
+                        Image(systemName: "key")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(SQ.text3)
+                        Text(r.username ?? "—")
+                            .font(SQ.mono)
+                            .foregroundStyle(SQ.text)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .help(r.username ?? "")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack {
+                        Spacer()
+                        SQButton(title: L("act.logout"), small: true) {
+                            model.confirm(r.server, message: L("set.reg.desc"), confirm: L("confirm.logout"), danger: true) {
+                                Task { try? await Commands.registryLogout(r.server); Store.shared.refreshSystemInfo() }
+                            }
+                        }
+                    }
+                    .frame(width: 96, alignment: .trailing)
+                }
+                .padding(.vertical, 9)
+                .overlay(alignment: .top) { Rectangle().fill(SQ.hairline).frame(height: 0.5) }
+            }
+        }
+    }
+
+    private func regHeadCell(_ text: String, width: CGFloat? = nil, trailing: Bool = false) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(SQ.text2)
+            .frame(width: width, alignment: trailing ? .trailing : .leading)
+            .frame(maxWidth: width == nil ? .infinity : nil, alignment: trailing ? .trailing : .leading)
+            .padding(.vertical, 10)
     }
 
     private var propertiesGroup: some View {

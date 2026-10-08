@@ -183,6 +183,7 @@
 "net.default.tag" = "Default";
 "del.net.title" = "Delete network \"{n}\"?";
 "del.net.msg" = "Containers attached to it will lose connectivity.";
+"del.net.system" = "System networks cannot be deleted.";
 
 "mach.empty" = "No machines";
 "mach.empty.hint" = "Create a machine to get a persistent Linux environment with your home directory mounted.";
@@ -251,7 +252,9 @@
 "set.dns.desc" = "Resolve container names as <name>.<domain> from your Mac. Requires administrator privileges.";
 "set.dns.add.ph" = "e.g. test";
 "set.reg" = "Registries";
-"set.reg.desc" = "Credentials are stored in your macOS keychain.";
+"set.reg.desc" = "Logged-in image registries used for pulling private images. Credentials are stored in your macOS keychain.";
+"set.reg.none" = "No registry logins yet.";
+"set.reg.actions" = "Actions";
 "set.reg.login.title" = "Registry Login";
 "set.reg.login.server" = "Server";
 "set.reg.login.server.ph" = "e.g. ghcr.io";

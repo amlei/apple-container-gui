@@ -1,6 +1,29 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Native toolbar bridge (HIG: the window toolbar owns page actions)
+
+struct ToolbarAction: Identifiable {
+    let id: String
+    let symbol: String
+    let label: String
+    var primary = false
+    let perform: () -> Void
+}
+
+@MainActor
+final class ToolbarBridge {
+    static let shared = ToolbarBridge()
+    private(set) var actions: [ToolbarAction] = []
+    var onActionsChanged: (() -> Void)?
+
+    func setActions(_ actions: [ToolbarAction]) {
+        guard actions.map(\.id) != self.actions.map(\.id) else { return }
+        self.actions = actions
+        onActionsChanged?()
+    }
+}
+
 /// Hosts the SwiftUI content root inside the split view.
 final class ContentViewController: NSViewController {
     static weak var current: ContentViewController?

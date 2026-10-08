@@ -58,20 +58,27 @@ VIEWS.networks = {
   list() {
     const customs = Mock.networks.filter(n => !n.system);
     if (!customs.length) return `<div class="card">${emptyHtml('globe', t('net.empty'), t('net.empty.hint'), 'open-net-new', t('net.new.title'))}</div>`;
-    return `<div class="mach-grid">${Mock.networks.map(n => `
-      <div class="card mach-card">
-        <div class="mach-top"><h4>${icon('globe')} ${esc(n.name)}</h4>
+    return `<div class="net-grid">${Mock.networks.map(n => `
+      <div class="card net-card">
+        <div class="net-head">
+          <span class="net-ico">${icon('globe')}</span>
+          <h4>${esc(n.name)}</h4>
           ${n.system ? `<span class="badge accent">${t('net.default.tag')}</span>` : ''}
-          ${n.internal ? `<span class="badge">${icon('shield')} ${t('net.internal')}</span>` : ''}</div>
-        <div class="mach-meta mono" style="font-size:12px">
-          <span>${t('net.subnet4')}: <b>${esc(n.subnet4)}</b></span>
-          ${n.subnet6 ? `<span>${t('net.subnet6')}: <b>${esc(n.subnet6)}</b></span>` : ''}
-          <span style="font-family:var(--font);margin-top:2px;color:var(--text-2)">${t('net.attached')}: ${n.attached.length ? n.attached.map(a => esc(a)).join(', ') : t('ct.d.none')}</span>
+          ${n.internal ? `<span class="badge">${icon('shield')} ${t('net.internal')}</span>` : ''}
         </div>
-        ${!n.system ? `<div class="mach-foot">
-          <span style="flex:1"></span>
-          <button class="btn small danger" data-action="net-delete" data-id="${esc(n.name)}">${icon('trash')}${t('act.delete')}</button>
-        </div>` : ''}
+        <div class="net-body">
+          <div class="net-kv"><span class="k">${t('net.subnet4')}</span><span class="v mono">${esc(n.subnet4)}</span></div>
+          <div class="net-kv"><span class="k">${t('net.subnet6')}</span><span class="v mono">${n.subnet6 ? esc(n.subnet6) : '<span style="color:var(--text-3)">—</span>'}</span></div>
+          <div class="net-kv"><span class="k">${t('net.attached')}</span><span class="v">${n.attached.length
+            ? `<span class="net-chips">${n.attached.map(a => `<span class="chip">${esc(a)}</span>`).join('')}</span>`
+            : '<span style="color:var(--text-3)">—</span>'}</span></div>
+        </div>
+        <div class="net-foot">
+          ${n.system
+            ? `<span class="net-foot-note">${icon('shield')}${t('del.net.system')}</span><span style="flex:1"></span>`
+            : `<span style="flex:1"></span>
+               <button class="btn small danger" data-action="net-delete" data-id="${esc(n.name)}">${icon('trash')}${t('act.delete')}</button>`}
+        </div>
       </div>`).join('')}</div>`;
   }
 };
@@ -322,15 +329,21 @@ VIEWS.settings = {
 
       <div class="card set-group">
         <div class="grp-head"><h3>${t('set.reg')}</h3><div class="desc">${t('set.reg.desc')}</div></div>
-        ${Mock.registries.map(r => `
-          <div class="set-line"><span class="lab mono">${esc(r.server)}</span>
-            <span class="val">${esc(r.user)}</span>
-            <span class="ctl"><span class="badge">${r.scheme}</span>
-              <button class="btn small" data-action="reg-logout" data-id="${esc(r.server)}">${t('act.logout')}</button></span>
+        ${Mock.registries.length ? `
+        <div class="reg-table">
+          <div class="reg-row reg-head">
+            <span>${t('set.reg.server')}</span><span>${t('set.reg.user')}</span>
+            <span>${t('set.reg.scheme')}</span><span class="ra">${t('set.reg.actions')}</span>
+          </div>
+          ${Mock.registries.map(r => `
+          <div class="reg-row">
+            <span class="cell mono" title="${esc(r.server)}">${esc(r.server)}</span>
+            <span class="cell mono" title="${esc(r.user)}"><span class="reg-user">${icon('key')}<span class="ru-t">${esc(r.user)}</span></span></span>
+            <span><span class="badge">${r.scheme}</span></span>
+            <span class="ra"><button class="btn small" data-action="reg-logout" data-id="${esc(r.server)}">${t('act.logout')}</button></span>
           </div>`).join('')}
-        <div class="set-line"><span class="ctl" style="flex:1;justify-content:flex-end;padding-top:10px">
-          <button class="btn small primary" data-action="reg-login">${icon('key')}${t('act.login')}</button>
-        </span></div>
+        </div>` : `<div class="reg-empty">${t('set.reg.none')}</div>`}
+        <div class="reg-login"><button class="btn small primary" data-action="reg-login">${icon('key')}${t('act.login')}</button></div>
       </div>
 
       <div class="card set-group">

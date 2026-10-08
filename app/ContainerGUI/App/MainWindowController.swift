@@ -1,6 +1,6 @@
 import AppKit
 
-final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate {
+final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate, NSToolbarDelegate {
     private var splitView: NSSplitView!
     private var sidebarVC: SidebarViewController!
     private var contentVC: ContentViewController!
@@ -10,13 +10,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             contentRect: NSRect(x: 0, y: 0, width: 1180, height: 760),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
-        window.title = "Container"
-        window.titlebarAppearsTransparent = true
+        window.title = Store.shared.route.title
+        // Standard titlebar/toolbar material: content that scrolls beneath it is
+        // separated by the system-drawn material + hairline (HIG: Designing for macOS).
+        window.titlebarAppearsTransparent = false
         window.toolbarStyle = .unified
         window.minSize = NSSize(width: 980, height: 600)
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
+
+        // Native unified toolbar: shows the page title (window.title) centered and
+        // hosts each page's primary actions on the trailing side.
+        let toolbar = NSToolbar(identifier: NSToolbar.Identifier("MainToolbar"))
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        window.toolbar = toolbar
 
         // Brand logo in the titlebar (design/ header: icon + "Container").
         if let url = Bundle.module.url(forResource: "logo", withExtension: "png"),
@@ -59,9 +69,61 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         splitView = split
         window.contentView = split
         split.setPosition(240, ofDividerAt: 0)
+
+        ToolbarBridge.shared.onActionsChanged = { [weak self] in self?.rebuildToolbar() }
+        NotificationCenter.default.addObserver(forName: .routeDidChange, object: nil, queue: .main) { [weak self] _ in
+            self?.syncTitle()
+            self?.rebuildToolbar()
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    private func syncTitle() {
+        window?.title = Store.shared.route.title
+    }
+
+    private func rebuildToolbar() {
+        guard let toolbar = window?.toolbar else { return }
+        while toolbar.items.count > 0 {
+            toolbar.removeItem(at: toolbar.items.count - 1)
+        }
+        toolbar.insertItem(withItemIdentifier: .flexibleSpace, at: 0)
+        for (offset, action) in ToolbarBridge.shared.actions.enumerated() {
+            toolbar.insertItem(withItemIdentifier: NSToolbarItem.Identifier(action.id), at: offset + 1)
+        }
+    }
+
+    // MARK: NSToolbarDelegate
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace] + ToolbarBridge.shared.actions.map { NSToolbarItem.Identifier($0.id) }
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarDefaultItemIdentifiers(toolbar)
+    }
+
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        if id == .flexibleSpace { return NSToolbarItem(itemIdentifier: id) }
+        guard let action = ToolbarBridge.shared.actions.first(where: { $0.id == id.rawValue }) else { return nil }
+        let item = NSToolbarItem(itemIdentifier: id)
+        let button = NSButton(image: NSImage(systemSymbolName: action.symbol, accessibilityDescription: action.label) ?? NSImage(),
+                              target: nil, action: nil)
+        button.bezelStyle = .texturedRounded
+        button.setButtonType(.momentaryPushIn)
+        button.controlSize = .regular
+        button.toolTip = action.label
+        if action.primary { button.contentTintColor = .controlAccentColor }
+        let trampoline = ButtonTrampoline(action.perform)
+        button.target = trampoline
+        button.action = #selector(ButtonTrampoline.fire)
+        objc_setAssociatedObject(button, "trampoline", trampoline, .OBJC_ASSOCIATION_RETAIN)
+        item.view = button
+        item.label = action.label
+        item.toolTip = action.label
+        return item
+    }
 
     // MARK: NSSplitViewDelegate
 

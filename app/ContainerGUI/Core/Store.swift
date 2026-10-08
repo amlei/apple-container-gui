@@ -55,7 +55,7 @@ final class Store: ObservableObject {
     @Published private(set) var df: DfReportJSON?
     @Published private(set) var properties: [(key: String, value: String)] = []
     @Published private(set) var dnsDomains: [String] = []
-    @Published private(set) var registries: [String] = []
+    @Published private(set) var registries: [RegistryLoginJSON] = []
     @Published private(set) var systemStartedAt: Date?
     @Published private(set) var languageVersion = 0
     var lastError: String?

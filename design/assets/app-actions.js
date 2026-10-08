@@ -524,4 +524,5 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
 
 THEME.apply();
 renderSidebarFoot();
+wireHeadScroll();
 go('overview');

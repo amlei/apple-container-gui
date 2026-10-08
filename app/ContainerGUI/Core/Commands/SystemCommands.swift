@@ -44,9 +44,11 @@ extension Commands {
         return out.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty && $0 != "DOMAIN" }
     }
 
-    static func registries() async -> [String] {
-        guard let out = try? await CLIRunner.run(["registry", "list", "--quiet"]) else { return [] }
-        return out.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    static func registries() async -> [RegistryLoginJSON] {
+        guard let out = try? await CLIRunner.run(["registry", "list", "--format", "json"]),
+              let data = out.data(using: .utf8),
+              let arr = try? decoder.decode([RegistryLoginJSON].self, from: data) else { return [] }
+        return arr
     }
 
     /// Stream `container system logs` with an optional `--last` window (e.g. "5m", "1h", "1d").

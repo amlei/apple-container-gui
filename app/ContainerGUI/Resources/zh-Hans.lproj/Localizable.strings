@@ -183,6 +183,7 @@
 "net.default.tag" = "默认";
 "del.net.title" = "删除网络“{n}”？";
 "del.net.msg" = "连接到该网络的容器将失去连通性。";
+"del.net.system" = "系统网络不可删除。";
 
 "mach.empty" = "暂无虚拟机";
 "mach.empty.hint" = "创建一台虚拟机，获得可持久化的 Linux 环境，并自动挂载你的主目录。";
@@ -251,7 +252,9 @@
 "set.dns.desc" = "在 Mac 上以 <名称>.<域名> 解析容器。需要管理员权限。";
 "set.dns.add.ph" = "例如 test";
 "set.reg" = "注册表";
-"set.reg.desc" = "凭据保存在 macOS 钥匙串中。";
+"set.reg.desc" = "已登录的镜像仓库，用于拉取私有镜像；凭据保存在 macOS 钥匙串中。";
+"set.reg.none" = "尚未登录任何镜像仓库";
+"set.reg.actions" = "操作";
 "set.reg.login.title" = "注册表登录";
 "set.reg.login.server" = "服务器";
 "set.reg.login.server.ph" = "例如 ghcr.io";
