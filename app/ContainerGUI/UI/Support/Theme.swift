@@ -21,7 +21,7 @@ func makeMonoLabel(_ text: String = "", size: CGFloat = 12, color: NSColor = .se
 }
 
 func sfIcon(_ name: String, size: CGFloat = 15, weight: NSFont.Weight = .regular) -> NSImageView {
-    let img = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+    let img = NSImage(systemSymbolName: name, accessibilityDescription: name)?
         .withSymbolConfiguration(.init(pointSize: size, weight: weight))
     let v = NSImageView(image: img ?? NSImage())
     v.translatesAutoresizingMaskIntoConstraints = false
@@ -37,7 +37,7 @@ func makeButton(_ title: String, symbol: String? = nil, primary: Bool = false, d
     b.translatesAutoresizingMaskIntoConstraints = false
     b.contentTintColor = danger ? .systemRed : nil
     if let sym = symbol {
-        b.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil)?
+        b.image = NSImage(systemSymbolName: sym, accessibilityDescription: title)?
             .withSymbolConfiguration(.init(pointSize: small ? 11 : 13, weight: .medium))
         b.imagePosition = .imageLeading
     }

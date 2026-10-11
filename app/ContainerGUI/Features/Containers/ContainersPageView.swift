@@ -73,7 +73,7 @@ struct ContainersPageView: View {
             Text(L("ct.status")).frame(width: 92, alignment: .leading)
             Text(L("ct.cpu")).frame(width: 56, alignment: .trailing)
             Text(L("ct.mem")).frame(width: 76, alignment: .trailing)
-            Text(L("ct.ip")).frame(maxWidth: .infinity, alignment: .leading)
+            Text(L("ct.ip")).frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
             Text(L("ct.created")).frame(width: 92, alignment: .trailing)
             Color.clear.frame(width: 56)
         }
@@ -143,12 +143,14 @@ private struct SQContainerRow: View {
                 Text(container.ip)
                     .font(SQ.monoSmall)
                     .foregroundStyle(SQ.text)
-                Text(portsText)
-                    .font(SQ.monoSmall)
-                    .foregroundStyle(SQ.text2)
-                    .lineLimit(1)
+                if !portsText.isEmpty {
+                    Text(portsText)
+                        .font(SQ.monoSmall)
+                        .foregroundStyle(SQ.text2)
+                        .lineLimit(1)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 140, maxWidth: .infinity, alignment: .leading)
             Text(Fmt.relTime(container.isRunning ? container.status.startedDate : (container.status.finishedDate ?? container.status.startedDate)))
                 .font(.system(size: 12))
                 .foregroundStyle(SQ.text2)

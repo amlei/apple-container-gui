@@ -39,14 +39,34 @@ struct SettingsPageView: View {
                 SQSegmented(options: [L("theme.auto"), L("theme.light"), L("theme.dark")], selection: $themeSel)
             }
             SQSettingsRow(label: L("set.language")) {
-                Picker("", selection: $langSel) {
+                Menu {
                     ForEach(["auto", "zh-Hans", "en"].indices, id: \.self) { i in
-                        Text(langLabel(i)).tag(i)
+                        Button(langLabel(i)) { langSel = i }
                     }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(langLabel(langSel))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(SQ.text)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(SQ.text3)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 26)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(SQ.cardBg)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(SQ.hairlineStrong, lineWidth: 0.5)
+                    )
+                    .contentShape(Rectangle())
                 }
-                .labelsHidden()
-                .controlSize(.small)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
         }
     }

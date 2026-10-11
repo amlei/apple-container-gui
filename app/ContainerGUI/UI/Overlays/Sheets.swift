@@ -461,7 +461,13 @@ struct SQBuildSheet: View {
             spec.target = target.isEmpty ? nil : target
             spec.noCache = noCache
             spec.pull = pull
-            return Commands.buildImageStream(spec, onLine: onLine, onExit: onExit)
+            let primaryTag = t.first ?? ""
+            let handle = Commands.buildImageStream(spec, onLine: { line in
+                onLine(line)
+                BuildRegistry.shared.append(tag: primaryTag, line: line)
+            }, onExit: onExit)
+            BuildRegistry.shared.register(pid: handle.pid, tags: t)
+            return handle
         }, onDone: {
             let t = tags.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             model.showToast(L("build.doneMsg", ["ref": t.first ?? "", "size": ""]))

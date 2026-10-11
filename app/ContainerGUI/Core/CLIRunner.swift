@@ -105,6 +105,7 @@ enum CLIRunner {
 final class ProcessHandle {
     fileprivate(set) var process: Process?
     fileprivate(set) var finished = false
+    var pid: Int? { process.map { Int($0.processIdentifier) } }
     func terminate() { process?.terminate() }
 }
 

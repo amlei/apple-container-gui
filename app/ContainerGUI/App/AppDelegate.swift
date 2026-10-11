@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var routeMenuItems: [Route: NSMenuItem] = [:]
     private var primaryMenuItem: NSMenuItem?
     private var findMenuItem: NSMenuItem?
+    private var sidebarMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.appearance = nil  // follow system
@@ -91,6 +92,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             it.keyEquivalentModifierMask = Keymap.menuKeyEquivalent(combo).flags
             routeMenuItems[r] = it
         }
+        viewMenu.addItem(.separator())
+        let sidebarItem = viewMenu.addItem(withTitle: L("menu.hideSidebar"), action: #selector(toggleSidebarAction), keyEquivalent: "s")
+        sidebarItem.target = self
+        sidebarItem.keyEquivalentModifierMask = [.command, .control]
+        sidebarMenuItem = sidebarItem
         viewItem.submenu = viewMenu
 
         // Window menu
@@ -100,6 +106,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowMenu.addItem(withTitle: L("menu.minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         windowMenu.addItem(withTitle: L("menu.zoom"), action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         windowItem.submenu = windowMenu
+
+        // Help menu (HIG: last standard menu)
+        let helpItem = NSMenuItem()
+        main.addItem(helpItem)
+        let helpMenu = NSMenu(title: L("menu.help"))
+        helpMenu.addItem(withTitle: L("term.help"), action: #selector(showHelpAction), keyEquivalent: "?")
+        helpItem.submenu = helpMenu
 
         NSApp.mainMenu = main
     }
@@ -119,6 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func updateSidebarMenuTitle(isVisible: Bool) {
+        sidebarMenuItem?.title = isVisible ? L("menu.hideSidebar") : L("menu.showSidebar")
+    }
+
     @MainActor @objc private func goRoute(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let r = Route(rawValue: raw) else { return }
         Store.shared.setRoute(r)
@@ -130,6 +147,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor @objc private func findAction() {
         NotificationCenter.default.post(name: .focusSearchAction, object: nil)
+    }
+
+    @objc private func toggleSidebarAction() {
+        NotificationCenter.default.post(name: .toggleSidebar, object: nil)
+    }
+
+    @objc private func showHelpAction() {
+        NotificationCenter.default.post(name: .showHelp, object: nil)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

@@ -381,3 +381,10 @@
 "keys.saved" = "快捷键已保存";
 "ov.disk.cache" = "构建缓存";
 "push.title" = "推送 {ref}";
+
+// HIG: Help menu, Sidebar toggle
+"menu.help" = "帮助";
+"menu.showSidebar" = "显示边栏";
+"menu.hideSidebar" = "隐藏边栏";
+
+"build.unknown.tag" = "（未知）";

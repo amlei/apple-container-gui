@@ -83,6 +83,7 @@ enum SQDrawer: Identifiable {
     case volume(name: String)
     case machineShell(name: String)
     case machineLogs(name: String)
+    case buildLog(tags: String)
 
     var id: String {
         switch self {
@@ -91,6 +92,7 @@ enum SQDrawer: Identifiable {
         case .volume(let name): return "v-\(name)"
         case .machineShell(let name): return "ms-\(name)"
         case .machineLogs(let name): return "ml-\(name)"
+        case .buildLog(let tags): return "bl-\(tags)"
         }
     }
 }

@@ -381,3 +381,10 @@
 "keys.saved" = "Shortcut saved";
 "ov.disk.cache" = "Build Cache";
 "push.title" = "Push {ref}";
+
+// HIG: Help menu, Sidebar toggle
+"menu.help" = "Help";
+"menu.showSidebar" = "Show Sidebar";
+"menu.hideSidebar" = "Hide Sidebar";
+
+"build.unknown.tag" = "(unknown)";

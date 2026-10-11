@@ -12,6 +12,33 @@ const emptyHtml = (iconName, title, hint, btnAction, btnLabel) => `
 const offlineBanner = () => Mock.system.servicesRunning ? '' : `
   <div class="banner offline">${icon('warn')}<div><b>${t('svc.notRunning.banner.title')}</b> · ${t('svc.notRunning.banner.msg')}</div></div>`;
 
+// Active builds detected from terminal (Mock: simulates ps scan of `container build` procs)
+Mock.activeBuilds = [
+  { tags: ['beecount-cloud:dev'], startedAt: Date.now() - 42000, source: 'terminal' },
+  { tags: ['api:latest', 'api:cache'], startedAt: Date.now() - 12000, source: 'app' }
+];
+// Simulated build output lines (mocks streaming `container build` output)
+Mock.buildLog = [
+  '[+] Building 42.3s (12/18)',
+  ' => [internal] load build definition from Dockerfile',
+  ' => => transferring dockerfile: 132B done',
+  ' => [internal] load .dockerignore',
+  ' => => transferring context: 88B done',
+  ' => [1/6] FROM docker.io/library/node:20-alpine',
+  ' => => resolve docker.io/library/node:20-alpine 0.4s',
+  ' => [2/6] RUN apk add --no-cache python3 make g++',
+  ' => => extracting node:20-alpine sha256:a1b2c3... 3.2s',
+  ' => [3/6] WORKDIR /app',
+  ' => [4/6] COPY package*.json ./',
+  ' => [4/6] DONE 0.1s',
+  ' => [5/6] RUN npm ci --omit=dev',
+  ' => => # added 128 packages in 18s',
+  ' => [6/6] COPY . .',
+  ' => exporting to image',
+  ' => => exporting layers 2.1s',
+  ' => => naming to docker.io/library/beecount-cloud:dev',
+];
+
 VIEWS.overview = {
   title: 'ov.title',
   render() {
@@ -420,10 +447,11 @@ VIEWS.images = {
         ? emptyHtml('search', t('img.nomatch'), '', 'clear-search')
         : emptyHtml('layers', t('img.empty'), t('img.empty.hint'), 'open-pull', t('act.pull'));
     }
+    const buildingRows = Mock.activeBuilds.map(b => buildingRowHtml(b)).join('');
     return `<table class="tbl"><thead><tr>
       <th style="width:30%">${t('img.ref')}</th><th>${t('img.size')}</th><th>${t('img.osarch')}</th>
       <th>${t('img.usedBy')}</th><th>${t('img.created')}</th><th style="width:96px"></th></tr></thead><tbody>
-      ${rows.map(i => `<tr data-action="row-open" data-kind="image" data-id="${esc(i.ref)}" tabindex="0">
+      ${buildingRows}${rows.map(i => `<tr data-action="row-open" data-kind="image" data-id="${esc(i.ref)}" tabindex="0">
         <td><div class="cell-main">${esc(i.ref)}</div><div class="cell-sub mono">${esc(i.id)}</div></td>
         <td class="num">${fmtBytes(i.size)}</td>
         <td class="mono">${i.os}/${i.arch}</td>
@@ -435,6 +463,23 @@ VIEWS.images = {
         </div></td></tr>`).join('')}</tbody></table>`;
   }
 };
+
+function buildingRowHtml(b) {
+  const elapsed = Math.max(1, Math.round((Date.now() - b.startedAt) / 1000));
+  const m = Math.floor(elapsed / 60), s = elapsed % 60;
+  const dur = m > 0 ? `${m}m${String(s).padStart(2, '0')}s` : `${s}s`;
+  return `<tr class="building">
+    <td><div class="cell-main"><svg class="spin" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-refresh"/></svg><span class="accent-text">${esc(b.tags.join(', '))}</span></div></td>
+    <td style="color:var(--text-3)">—</td>
+    <td style="color:var(--text-3)">—</td>
+    <td><span class="badge gray">—</span></td>
+    <td><span class="badge accent mono-num">${dur}</span></td>
+    <td><div class="row-actions visible">
+      ${b.source === 'terminal'
+        ? `<span class="mini-act-hint" title="${t('build.output.unavailable')}">${icon('info')}</span>`
+        : `<button class="mini-act" data-action="open-build-log" data-id="${esc(b.tags[0])}" title="${t('build.log.title')}">${icon('log')}</button>`}
+    </div></td></tr>`;
+}
 
 function imageMenu(img) {
   showMenu([

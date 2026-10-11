@@ -24,6 +24,7 @@ const ACT = {
   'open-run': () => runSheet(),
   'open-pull': () => pullSheet(),
   'open-build': () => buildSheet(),
+  'open-build-log': el => buildLogDrawer(el.dataset.id),
   'row-open': el => {
     const { kind, id } = el.dataset;
     if (kind === 'container') containerDrawer(id);
@@ -401,6 +402,35 @@ function machineShellDrawer(name) {
     </div>
     <div class="drawer-b" id="ms-root"></div>`);
   mountTerminal(el.querySelector('#ms-root'), { host: name });
+}
+
+function buildLogDrawer(tag) {
+  const b = Mock.activeBuilds.find(x => x.tags[0] === tag);
+  const { el } = openDrawer(`
+    <div class="drawer-h">
+      <div style="flex:1;min-width:0"><h2>${esc(tag)}</h2>
+        <div class="sub">${t('build.log.title')}</div></div>
+      <button class="icon-btn ghost" data-close>${icon('x')}</button>
+    </div>
+    <div class="drawer-b">
+      ${b && b.source === 'terminal'
+        ? `<div class="banner building" style="margin-bottom:10px">${icon('warn')}<div>${t('build.output.unavailable')}</div></div>`
+        : ''}
+      <div class="log-view" id="bl-view" style="max-height:none"></div>
+    </div>`);
+  const view = el.querySelector('#bl-view');
+  let i = 0;
+  const push = () => {
+    if (i >= Mock.buildLog.length) return;
+    const line = Mock.buildLog[i++];
+    const ts = new Date().toLocaleTimeString(I18N.locale(), { hour12: false });
+    view.insertAdjacentHTML('beforeend', `<div><span class="t">${ts}</span>${esc(line)}</div>`);
+    view.scrollTop = view.scrollHeight;
+  };
+  // For app builds: stream lines progressively; terminal builds show status only
+  if (!b || b.source !== 'terminal') {
+    Mock.buildLog.forEach((_, idx) => setTimeout(push, idx * 350));
+  }
 }
 
 function syslogsDrawer() {

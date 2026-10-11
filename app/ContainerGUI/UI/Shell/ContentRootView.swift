@@ -159,6 +159,37 @@ struct SQOfflineBanner: View {
     }
 }
 
+/// Drawer showing live output of an app-initiated `container build`.
+struct BuildLogDrawerView: View {
+    let tags: String
+    @State private var lines: [String] = []
+    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(tags)
+                .font(.system(size: 16, weight: .bold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text(L("build.log.title"))
+                .font(.system(size: 12))
+                .foregroundStyle(SQ.text2)
+                .padding(.top, 2)
+            SQLogView(lines: lines)
+                .frame(maxHeight: .infinity)
+                .padding(.top, 12)
+        }
+        .padding(.top, 20)
+        .padding(.horizontal, 22)
+        .padding(.bottom, 18)
+        .onAppear { lines = BuildRegistry.shared.logs(tag: tags) }
+        .onReceive(timer) { _ in
+            let fresh = BuildRegistry.shared.logs(tag: tags)
+            if fresh != lines { lines = fresh }
+        }
+    }
+}
+
 // MARK: - Toast
 
 struct SQToastView: View {
@@ -199,6 +230,7 @@ struct SQDrawerHost: View {
                 case .volume(let name): VolumeDrawerView(name: name)
                 case .machineShell(let name): MachineShellDrawerView(name: name)
                 case .machineLogs(let name): MachineLogsDrawerView(name: name)
+                case .buildLog(let tags): BuildLogDrawerView(tags: tags)
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .trailing)

@@ -28,22 +28,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
 
-        // Brand logo in the titlebar (design/ header: icon + "Container").
-        if let url = Bundle.module.url(forResource: "logo", withExtension: "png"),
-           let logo = NSImage(contentsOf: url) {
-            let host = NSView(frame: NSRect(x: 0, y: 0, width: 30, height: 26))
-            let iv = NSImageView(image: logo)
-            iv.imageScaling = .scaleProportionallyUpOrDown
-            iv.frame = NSRect(x: 0, y: 1, width: 22, height: 22)
-            iv.wantsLayer = true
-            iv.layer?.cornerRadius = 5
-            iv.layer?.masksToBounds = true
-            host.addSubview(iv)
-            let accessory = NSTitlebarAccessoryViewController()
-            accessory.layoutAttribute = .leading
-            accessory.view = host
-            window.addTitlebarAccessoryViewController(accessory)
-        }
 
         let sidebarVC = SidebarViewController()
         let contentVC = ContentViewController()
@@ -61,6 +45,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         sidebarHost.addSubview(sidebarVC.view)
 
         let split = NSSplitView(frame: window.contentLayoutRect)
+        split.setAccessibilityLabel("Main split view")
         split.isVertical = true
         split.dividerStyle = .thin
         split.delegate = self
@@ -75,6 +60,32 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             self?.syncTitle()
             self?.rebuildToolbar()
         }
+        NotificationCenter.default.addObserver(forName: .toggleSidebar, object: nil, queue: .main) { [weak self] _ in
+            self?.toggleSidebar()
+        }
+        NotificationCenter.default.addObserver(forName: .showHelp, object: nil, queue: .main) { [weak self] _ in
+            self?.showHelp()
+        }
+    }
+
+    @objc private func toggleSidebar() {
+        guard let split = splitView, split.arrangedSubviews.count > 1 else { return }
+        let sidebar = split.arrangedSubviews[0]
+        let willShow = sidebar.isHidden
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.allowsImplicitAnimation = true
+            sidebar.animator().isHidden = !willShow
+            if willShow { split.setPosition(240, ofDividerAt: 0) }
+        }
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+            appDelegate.updateSidebarMenuTitle(isVisible: willShow)
+        }
+    }
+
+    @objc private func showHelp() {
+        guard let url = URL(string: "https://github.com/apple/container") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -153,6 +164,7 @@ final class SidebarViewController: NSViewController {
 
     override func loadView() {
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 240, height: 700))
+        container.setAccessibilityLabel("Sidebar navigation")
 
         var items: [NSView] = []
         for route in Route.allCases {
@@ -264,6 +276,9 @@ final class NavButton: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         heightAnchor.constraint(equalToConstant: 34).isActive = true
+        setAccessibilityElement(true)
+        setAccessibilityLabel(route.title)
+        setAccessibilityRole(.button)
 
         highlight.cornerRadius = 7
         layer?.addSublayer(highlight)

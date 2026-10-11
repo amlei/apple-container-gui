@@ -51,6 +51,10 @@ struct ImagesPageView: View {
                             .background(SQ.cardBg.opacity(0.88))
                             .overlay(alignment: .bottom) { Rectangle().fill(SQ.hairlineStrong).frame(height: 0.5) }
 
+                            ForEach(store.activeBuilds) { build in
+                                SQBuildingRow(build: build)
+                                Divider()
+                            }
                             ForEach(filtered.indices, id: \.self) { i in
                                 SQImageRow(image: filtered[i])
                                 if i != filtered.count - 1 { Divider() }
@@ -148,5 +152,83 @@ private struct SQImageRow: View {
                 SQBadge(text: "—")
             }
         }
+    }
+}
+
+
+// MARK: - Active build row (terminal or app-initiated `container build` in progress)
+
+private struct SQBuildingRow: View {
+    let build: ActiveBuild
+    @EnvironmentObject private var model: SQAppModel
+    @State private var now = Date()
+
+    private var durationText: String {
+        let s = max(1, Int(now.timeIntervalSince(build.startedAt)))
+        if s < 60 { return "\(s)s" }
+        return String(format: "%dm%02ds", s / 60, s % 60)
+    }
+
+    var body: some View {
+        HStack(spacing: 16) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(build.tags.joined(separator: ", "))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SQ.accent)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("—")
+                .font(.system(size: 12))
+                .foregroundStyle(SQ.text3)
+                .frame(width: 76, alignment: .trailing)
+            Text("—")
+                .font(SQ.monoSmall)
+                .foregroundStyle(SQ.text3)
+                .frame(width: 88, alignment: .leading)
+            Text("—")
+                .font(.system(size: 12))
+                .foregroundStyle(SQ.text3)
+                .frame(width: 64, alignment: .center)
+            Text(durationText)
+                .font(SQ.monoSmall)
+                .foregroundStyle(SQ.accent)
+                .monospacedDigit()
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(SQ.accent.opacity(0.12)))
+                .frame(width: 92, alignment: .trailing)
+
+            HStack(spacing: 3) {
+                if build.source == .app {
+                    Button {
+                        model.openDrawer(.buildLog(tags: build.tags.first ?? ""))
+                    } label: {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(SQ.text2)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SQPlainButtonStyle())
+                    .help(L("build.log.title"))
+                } else {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(SQ.text3)
+                        .frame(width: 24, height: 24)
+                        .help(L("build.output.unavailable"))
+                }
+            }
+            .frame(width: 56)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(SQ.accent.opacity(0.04))
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 }

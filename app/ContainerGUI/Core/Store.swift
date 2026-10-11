@@ -6,6 +6,8 @@ extension Notification.Name {
     static let routeDidChange = Notification.Name("routeDidChange")
     static let runPrimaryAction = Notification.Name("runPrimaryAction")
     static let focusSearchAction = Notification.Name("focusSearchAction")
+    static let toggleSidebar = Notification.Name("toggleSidebar")
+    static let showHelp = Notification.Name("showHelp")
 }
 
 enum Route: String, CaseIterable {
@@ -46,6 +48,7 @@ final class Store: ObservableObject {
     @Published private(set) var route: Route = .overview
     @Published private(set) var containers: [ManagedContainer] = []
     @Published private(set) var images: [ImageResourceJSON] = []
+    @Published private(set) var activeBuilds: [ActiveBuild] = []
     @Published private(set) var volumes: [VolumeResourceJSON] = []
     @Published private(set) var networks: [NetworkResourceJSON] = []
     @Published private(set) var machines: [MachineResourceJSON] = []
@@ -101,6 +104,7 @@ final class Store: ObservableObject {
             NSLog("CGUI refresh done: status=%@ images=%d err=%@", s?.status ?? "nil", i.count, lastError ?? "-")
             self.containers = c
             self.images = i
+            self.activeBuilds = BuildDetector.detect(appPIDs: BuildRegistry.shared.appPIDs)
             self.volumes = v
             self.networks = n
             self.machines = await self.enrichMachines(m)
@@ -179,5 +183,118 @@ final class Store: ObservableObject {
     /// Containers that look like k8s cluster nodes (used to guard k8s actions).
     func containerExists(_ id: String) -> Bool {
         containers.contains { $0.id == id }
+    }
+}
+
+
+// MARK: - External build detection
+
+enum BuildSource: Equatable {
+    case app
+    case terminal
+}
+
+struct ActiveBuild: Identifiable, Equatable {
+    let id: Int
+    let tags: [String]
+    let startedAt: Date
+    let source: BuildSource
+}
+
+/// Tracks app-initiated builds (PID ownership) and mirrors their output so the
+/// images-page log drawer can show live build output. Terminal builds are only
+/// observed via `ps`; their stdout belongs to the originating session.
+final class BuildRegistry {
+    static let shared = BuildRegistry()
+    private var pidToTags: [Int: [String]] = [:]
+    private var firstSeen: [Int: Date] = [:]
+    private var logsByTag: [String: [String]] = [:]
+    private let lock = NSLock()
+
+    var appPIDs: Set<Int> { lock.lock(); defer { lock.unlock() }; return Set(pidToTags.keys) }
+
+    func register(pid: Int?, tags: [String]) {
+        guard let pid, !tags.isEmpty else { return }
+        lock.lock(); defer { lock.unlock() }
+        pidToTags[pid] = tags
+        if firstSeen[pid] == nil { firstSeen[pid] = Date() }
+        for t in tags where logsByTag[t] == nil { logsByTag[t] = [] }
+    }
+
+    func firstSeenDate(pid: Int) -> Date? {
+        lock.lock(); defer { lock.unlock() }
+        return firstSeen[pid]
+    }
+
+    func append(tag: String, line: String) {
+        lock.lock(); defer { lock.unlock() }
+        logsByTag[tag, default: []].append(line)
+        if logsByTag[tag]!.count > 800 { logsByTag[tag]!.removeFirst(logsByTag[tag]!.count - 800) }
+    }
+
+    func finish(pid: Int) {
+        lock.lock(); defer { lock.unlock() }
+        pidToTags.removeValue(forKey: pid)
+    }
+
+    func logs(tag: String) -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return logsByTag[tag] ?? []
+    }
+}
+
+enum BuildDetector {
+    /// Scan `ps` output for terminal-initiated `container build` processes.
+    /// Excludes the GUI app itself and the in-app build (tracked separately).
+    static func detect(appPIDs: Set<Int>) -> [ActiveBuild] {
+        guard let out = runPS() else { return [] }
+        var builds: [ActiveBuild] = []
+        for line in out.split(whereSeparator: \.isNewline) {
+            // ps line format: "<pid> <command...>". Command must START with a path
+            // ending in "/container" followed by "build" — excludes shell wrappers
+            // whose text merely contains the string, and the GUI app binary
+            // (".../MacOS/Container" lacks the "/container " token boundary).
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard let firstSpace = trimmed.firstIndex(of: " ") else { continue }
+            guard let pid = Int(trimmed[..<firstSpace]) else { continue }
+            let cmd = trimmed[trimmed.index(after: firstSpace)...].trimmingCharacters(in: .whitespaces)
+            // Command must start with a path whose last component is "container",
+            // followed by the "build" subcommand — e.g. "/usr/local/bin/container build …".
+            guard let containerRange = cmd.range(of: "/container ") else { continue }
+            let pathPrefix = cmd[..<containerRange.lowerBound]
+            guard !pathPrefix.isEmpty, !pathPrefix.contains(" "),
+                  !pathPrefix.hasPrefix("\""), !pathPrefix.hasPrefix("'") else { continue }
+            let afterContainer = cmd[containerRange.upperBound...]
+            guard afterContainer.hasPrefix("build ") || afterContainer == "build" else { continue }
+            let args = String(afterContainer.dropFirst("build".count))
+            var tags: [String] = []
+            let tokens = args.split(separator: " ").map(String.init)
+            var i = 0
+            while i < tokens.count {
+                if (tokens[i] == "-t" || tokens[i] == "--tag"), i + 1 < tokens.count {
+                    tags.append(tokens[i + 1]); i += 2
+                } else if tokens[i].hasPrefix("-t"), tokens[i].count > 2 {
+                    tags.append(String(tokens[i].dropFirst(2))); i += 1
+                } else { i += 1 }
+            }
+            let started = BuildRegistry.shared.firstSeenDate(pid: pid) ?? Date()
+            let source: BuildSource = appPIDs.contains(pid) ? .app : .terminal
+            builds.append(ActiveBuild(id: pid, tags: tags.isEmpty ? [L("build.unknown.tag")] : tags, startedAt: started, source: source))
+        }
+        return builds
+    }
+
+    private static func runPS() -> String? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/ps")
+        p.arguments = ["-eo", "pid,command"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 }
